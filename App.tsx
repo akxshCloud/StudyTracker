@@ -1,15 +1,16 @@
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native';
+import { AuthNavigator } from './src/navigation/AuthNavigator';
 
 export default function App() {
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <View className="flex-1 px-4 py-6">
-        <Text className="text-2xl font-bold text-primary">
-          Study Assistant
-        </Text>
+    <NavigationContainer>
+      <SafeAreaProvider>
         <StatusBar style="auto" />
-      </View>
-    </SafeAreaView>
+        <AuthNavigator />
+      </SafeAreaProvider>
+    </NavigationContainer>
   );
 }
