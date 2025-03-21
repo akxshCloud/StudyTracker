@@ -9,12 +9,15 @@ import {
 interface AuthButtonProps extends TouchableOpacityProps {
   title: string;
   loading?: boolean;
+  className?: string;
+  textClassName?: string;
 }
 
 export const AuthButton: React.FC<AuthButtonProps> = ({
   title,
   loading = false,
   className = '',
+  textClassName = '',
   disabled,
   ...props
 }) => {
@@ -29,13 +32,7 @@ export const AuthButton: React.FC<AuthButtonProps> = ({
       {loading ? (
         <ActivityIndicator color="#fff" />
       ) : (
-        <Text
-          style={{
-            color: '#fff',
-            fontSize: 16,
-            fontWeight: '500',
-          }}
-        >
+        <Text className={`text-white font-semibold text-lg ${textClassName}`}>
           {title}
         </Text>
       )}

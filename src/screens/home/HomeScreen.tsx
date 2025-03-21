@@ -69,11 +69,25 @@ export const HomeScreen: React.FC = () => {
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [weeklyHours, setWeeklyHours] = useState(0);
   const menuAnimation = new Animated.Value(0);
+  const [profileData, setProfileData] = useState<any>(null);
 
   useEffect(() => {
     const getUserData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUserData(user);
+
+      // Fetch profile data including avatar_url
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          setUserData(prev => ({ ...prev, ...profile }));
+        }
+      }
     };
     getUserData();
   }, []);
@@ -143,8 +157,33 @@ export const HomeScreen: React.FC = () => {
 
   const handleProfile = () => {
     setShowMenu(false);
-    // We'll implement profile navigation later
-    // navigation.navigate('Profile');
+    navigation.navigate('Profile');
+  };
+
+  // Add useFocusEffect to refresh data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchUserProfile();
+    }, [])
+  );
+
+  const fetchUserProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          setProfileData(profile);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
   };
 
   return (
@@ -161,8 +200,19 @@ export const HomeScreen: React.FC = () => {
                   className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden"
                 >
                   <Image
-                    source={{ uri: `https://ui-avatars.com/api/?name=${userData?.email?.split('@')[0] || 'User'}&background=random` }}
-                    className="w-full h-full"
+                    source={
+                      profileData?.avatar_url
+                        ? { uri: profileData.avatar_url }
+                        : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(profileData?.full_name || userData?.email?.split('@')[0] || 'User')}&background=random&size=128` }
+                    }
+                    className="w-10 h-10 rounded-full"
+                    onError={() => {
+                      console.error('Error loading avatar in HomeScreen');
+                      // Reset to default avatar on error
+                      if (profileData?.avatar_url) {
+                        setProfileData(prev => ({ ...prev, avatar_url: null }));
+                      }
+                    }}
                   />
                 </TouchableOpacity>
               </View>
