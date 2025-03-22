@@ -69,6 +69,8 @@ export const HomeScreen: React.FC = () => {
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
+      // Navigate back to loading screen
+      navigation.getParent()?.navigate('Loading');
     } catch (error) {
       console.error('Error logging out:', error);
     }
