@@ -173,20 +173,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           <View className="mb-8">
             <Text 
               style={{ 
-                fontSize: 28, 
+                fontSize: 50, 
                 color: '#000', 
                 marginBottom: 4, 
-                fontWeight: '600',
+                fontWeight: '800',
                 textAlign: 'center',
               }}
             >
-              Study Tracker
+              Right-Track
             </Text>
             <Text 
               style={{ 
-                fontSize: 16, 
+                fontSize: 18, 
                 color: '#666', 
-                fontWeight: '400',
+                fontWeight: '300',
                 textAlign: 'center',
               }}
             >
