@@ -2,8 +2,8 @@ import React, { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated, Dimensions, Image, Easing } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { LinearGradient } from 'expo-linear-gradient';
 import { RootStackParamList } from '../navigation/RootNavigator';
+import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 
 type LoadingScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Loading'>;
 
@@ -14,6 +14,11 @@ const LoadingScreen = () => {
   const buttonScale = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
+
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_600SemiBold,
+  });
 
   useEffect(() => {
     // Fade in animation
@@ -69,11 +74,12 @@ const LoadingScreen = () => {
     outputRange: [0, -10]
   });
 
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
-    <LinearGradient
-      colors={['#0f1025', '#1a1b35']}
-      style={styles.container}
-    >
+    <View style={styles.container}>
       <Animated.View 
         style={[
           styles.imageContainer,
@@ -91,10 +97,7 @@ const LoadingScreen = () => {
       </Animated.View>
 
       <View style={styles.bottomContainer}>
-        <LinearGradient
-          colors={['rgba(15, 16, 37, 0)', 'rgba(15, 16, 37, 1)']}
-          style={styles.bottomGradient}
-        >
+        <View style={styles.bottomBackground}>
           <Animated.View 
             style={[
               styles.contentWrapper,
@@ -128,9 +131,9 @@ const LoadingScreen = () => {
               </Pressable>
             </Animated.View>
           </Animated.View>
-        </LinearGradient>
+        </View>
       </View>
-    </LinearGradient>
+    </View>
   );
 };
 
@@ -139,6 +142,7 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     overflow: 'hidden',
+    backgroundColor: '#0A0B1E', // Deep navy background
   },
   imageContainer: {
     flex: 1,
@@ -159,24 +163,25 @@ const styles = StyleSheet.create({
     right: 0,
     height: 160,
   },
-  bottomGradient: {
+  bottomBackground: {
     flex: 1,
-    paddingHorizontal: 32,
+    paddingHorizontal: 16,
     paddingBottom: 48,
     justifyContent: 'flex-end',
+    backgroundColor: '#0A0B1E', // Match container background
   },
   contentWrapper: {
     flexDirection: 'row',
     borderWidth: 2,
     borderColor: '#6966ff',
     borderRadius: 50,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
+    paddingVertical: 5,
+    paddingHorizontal: 15,
     backgroundColor: 'rgba(15, 16, 37, 0.3)',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    maxWidth: width - 48,
+    maxWidth: width - 24,
     alignSelf: 'center',
     shadowColor: '#6966ff',
     shadowOffset: {
@@ -189,8 +194,9 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontWeight: '900',
+    fontFamily: 'Inter_400Regular',
     color: '#ffffff',
+    letterSpacing: -0.5,
     textShadowColor: 'rgba(255, 255, 255, 0.1)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
@@ -200,14 +206,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   startButtonPressable: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 5,
     borderRadius: 50,
     backgroundColor: 'transparent',
   },
   startText: {
     color: '#ffffff',
-    fontSize: 28,
+    fontSize: 20,
+    fontFamily: 'Inter_600SemiBold',
     fontWeight: '600',
   }
 });
