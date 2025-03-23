@@ -1,27 +1,6 @@
 # Study Assistant App
 
-A React Native application to help students track their studies and improve productivity.
-
-## Setup Instructions
-
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Configure Supabase:
-   - Create a Supabase project at https://supabase.com
-   - Copy your project URL and anon key
-   - Update the credentials in `src/lib/supabase.ts`
-
-3. Run the app:
-```bash
-# For iOS
-npm run ios
-
-# For Android
-npm run android
-```
+Your pocket study assistant!
 
 ## Tech Stack
 
@@ -29,24 +8,6 @@ npm run android
 - TypeScript
 - Tailwind CSS (via NativeWind)
 - Supabase
-
-## Project Structure
-
-```
-src/
-├── components/     # Reusable UI components
-├── screens/        # Screen components
-├── lib/           # Configuration and utilities
-├── types/         # TypeScript type definitions
-├── hooks/         # Custom React hooks
-└── assets/        # Images, fonts, etc.
-```
-
-## Development
-
-- Use `npm start` to start the Expo development server
-- Use `npm run ios` to run on iOS simulator
-- Use `npm run android` to run on Android emulator
 
 ## Future Roadmap
 
