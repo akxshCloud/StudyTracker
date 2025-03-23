@@ -7,12 +7,16 @@ import {
   Image,
   Platform,
   Animated,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
+import { StudyGroup } from '../../types/studyGroup';
+import { StudyGroupCard } from '../../components/groups/StudyGroupCard';
+import { UserData, UserProfile } from '../../types/user';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -65,28 +69,35 @@ const SessionCard: React.FC<SessionCardProps> = ({ subject, date, duration }) =>
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const [showMenu, setShowMenu] = useState(false);
-  const [userData, setUserData] = useState<any>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [sessions, setSessions] = useState<StudySession[]>([]);
   const [weeklyHours, setWeeklyHours] = useState(0);
   const menuAnimation = new Animated.Value(0);
-  const [profileData, setProfileData] = useState<any>(null);
+  const [profileData, setProfileData] = useState<UserProfile | null>(null);
+  const [studyGroups, setStudyGroups] = useState<StudyGroup[]>([]);
 
   useEffect(() => {
     const getUserData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
       setUserData(user);
 
       // Fetch profile data including avatar_url
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url, bio, created_at, updated_at')
+        .eq('id', user.id)
+        .single();
 
-        if (profile) {
-          setUserData(prev => ({ ...prev, ...profile }));
-        }
+      if (profileData) {
+        setUserData({ ...user, ...profileData });
+        setProfileData({
+          id: user.id,
+          full_name: profileData.full_name,
+          avatar_url: profileData.avatar_url,
+          bio: profileData.bio
+        });
       }
     };
     getUserData();
@@ -94,14 +105,17 @@ export const HomeScreen: React.FC = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (userData) {
+      if (userData?.id) {
         fetchSessions();
+        fetchStudyGroups();
       }
     }, [userData])
   );
 
   const fetchSessions = async () => {
     try {
+      if (!userData?.id) return;
+      
       // Fetch all sessions for the current user
       const { data: allSessions, error } = await supabase
         .from('study_sessions')
@@ -162,30 +176,39 @@ export const HomeScreen: React.FC = () => {
     navigation.navigate('Profile');
   };
 
-  // Add useFocusEffect to refresh data when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchUserProfile();
-    }, [])
-  );
-
-  const fetchUserProfile = async () => {
+  const fetchStudyGroups = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        
-        if (profile) {
-          setProfileData(profile);
-        }
-      }
+      if (!user) return;
+
+      // First get groups where user is a member
+      const { data: memberGroups, error: memberError } = await supabase
+        .from('study_groups')
+        .select('*, members:group_members(*)')
+        .eq('members.user_id', user.id);
+
+      if (memberError) throw memberError;
+
+      // Then get groups where user is the creator
+      const { data: createdGroups, error: creatorError } = await supabase
+        .from('study_groups')
+        .select('*, members:group_members(*)')
+        .eq('creator_id', user.id);
+
+      if (creatorError) throw creatorError;
+
+      // Combine and deduplicate groups
+      const allGroups = [...(memberGroups || []), ...(createdGroups || [])];
+      const uniqueGroups = Array.from(new Map(allGroups.map(group => [group.id, group])).values());
+      
+      setStudyGroups(uniqueGroups);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error fetching study groups:', error);
     }
+  };
+
+  const handleCreateGroup = () => {
+    navigation.navigate('CreateGroup');
   };
 
   return (
@@ -236,7 +259,16 @@ export const HomeScreen: React.FC = () => {
 
             {/* Recent Sessions */}
             <View className="mb-6">
-              <Text className="text-xl font-semibold mb-4">Recent Sessions</Text>
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-xl font-semibold">Recent Sessions</Text>
+                <TouchableOpacity 
+                  onPress={() => navigation.navigate('AddSession')}
+                  className="flex-row items-center"
+                >
+                  <Text className="text-[#4B6BFB] font-medium mr-1">New</Text>
+                  <Text className="text-[#4B6BFB] font-medium text-lg">+</Text>
+                </TouchableOpacity>
+              </View>
               {sessions.length === 0 ? (
                 <Text className="text-gray-500 text-center py-4">
                   No study sessions yet. Add your first one!
@@ -253,15 +285,33 @@ export const HomeScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Add New Session Button */}
-            <TouchableOpacity 
-              className="bg-[#4B6BFB] rounded-xl py-4 items-center"
-              onPress={() => navigation.navigate('AddSession')}
-            >
-              <Text className="text-white font-semibold text-lg">
-                Add New Session
-              </Text>
-            </TouchableOpacity>
+            {/* Study Groups */}
+            <View className="mb-6">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-xl font-semibold">Study Groups</Text>
+                <TouchableOpacity 
+                  onPress={handleCreateGroup}
+                  className="flex-row items-center"
+                >
+                  <Text className="text-[#4B6BFB] font-medium mr-1">New</Text>
+                  <Text className="text-[#4B6BFB] font-medium text-lg">+</Text>
+                </TouchableOpacity>
+              </View>
+              {studyGroups.length === 0 ? (
+                <Text className="text-gray-500 text-center py-4">
+                  No study groups yet. Create your first one!
+                </Text>
+              ) : (
+                studyGroups.slice(0, 3).map((group, index) => (
+                  <StudyGroupCard
+                    key={group.id}
+                    group={group}
+                    index={index}
+                    onPress={(group) => navigation.navigate('StudyGroup', { groupId: group.id })}
+                  />
+                ))
+              )}
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
