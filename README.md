@@ -68,9 +68,11 @@ src/
    - `subjects` for managing preset subject lists
    - `statistics` for aggregated study data
 
-These enhancements will enable:
-- Better session organization and categorization
-- Goal setting and tracking
-- Advanced analytics and insights
-- Personalized study recommendations
-- Time zone aware scheduling 
+### Additional Features
+
+1. Android Support
+2. AI Integration for Smart Features:
+   - Personalized study recommendations
+   - Time zone aware scheduling
+   - Advanced analytics and insights
+   - Goal setting and tracking assistance
