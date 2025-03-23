@@ -235,7 +235,10 @@ export const HomeScreen: React.FC = () => {
                       console.error('Error loading avatar in HomeScreen');
                       // Reset to default avatar on error
                       if (profileData?.avatar_url) {
-                        setProfileData(prev => ({ ...prev, avatar_url: null }));
+                        setProfileData(prev => prev ? {
+                          ...prev,
+                          avatar_url: null
+                        } : null);
                       }
                     }}
                   />
