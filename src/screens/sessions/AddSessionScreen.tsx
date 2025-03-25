@@ -13,17 +13,21 @@ import {
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { supabase } from '../../lib/supabase';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type AddSessionScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddSession'>;
+type AddSessionScreenRouteProp = RouteProp<RootStackParamList, 'AddSession'>;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MODAL_WIDTH = Math.min(SCREEN_WIDTH - 32, 400);
 
 export const AddSessionScreen: React.FC = () => {
   const navigation = useNavigation<AddSessionScreenNavigationProp>();
+  const route = useRoute<AddSessionScreenRouteProp>();
   const [subject, setSubject] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,6 +38,9 @@ export const AddSessionScreen: React.FC = () => {
   const [showStartTime, setShowStartTime] = useState(false);
   const [showEndDate, setShowEndDate] = useState(false);
   const [showEndTime, setShowEndTime] = useState(false);
+  const isGroupSession = !!route.params?.groupId;
+  const [tempStartDate, setTempStartDate] = useState(new Date());
+  const [tempEndDate, setTempEndDate] = useState(new Date());
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
@@ -68,39 +75,43 @@ export const AddSessionScreen: React.FC = () => {
   };
 
   const handleStartDateChange = (event: DateTimePickerEvent, date?: Date) => {
-    setShowStartDate(false);
     if (date) {
-      const newDate = new Date(startDate);
+      const newDate = new Date(tempStartDate);
       newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-      setStartDate(newDate);
+      setTempStartDate(newDate);
     }
   };
 
   const handleStartTimeChange = (event: DateTimePickerEvent, date?: Date) => {
-    setShowStartTime(false);
     if (date) {
-      const newDate = new Date(startDate);
+      const newDate = new Date(tempStartDate);
       newDate.setHours(date.getHours(), date.getMinutes());
-      setStartDate(newDate);
+      setTempStartDate(newDate);
     }
   };
 
   const handleEndDateChange = (event: DateTimePickerEvent, date?: Date) => {
-    setShowEndDate(false);
     if (date) {
-      const newDate = new Date(endDate);
+      const newDate = new Date(tempEndDate);
       newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-      setEndDate(newDate);
+      setTempEndDate(newDate);
     }
   };
 
   const handleEndTimeChange = (event: DateTimePickerEvent, date?: Date) => {
-    setShowEndTime(false);
     if (date) {
-      const newDate = new Date(endDate);
+      const newDate = new Date(tempEndDate);
       newDate.setHours(date.getHours(), date.getMinutes());
-      setEndDate(newDate);
+      setTempEndDate(newDate);
     }
+  };
+
+  const confirmStartDateTime = () => {
+    setStartDate(tempStartDate);
+  };
+
+  const confirmEndDateTime = () => {
+    setEndDate(tempEndDate);
   };
 
   const handleAddSession = async () => {
@@ -135,6 +146,7 @@ export const AddSessionScreen: React.FC = () => {
             end_time: endDate.toISOString(),
             notes: notes || null,
             created_at: new Date().toISOString(),
+            group_id: route.params?.groupId || null
           },
         ]);
 
@@ -153,7 +165,8 @@ export const AddSessionScreen: React.FC = () => {
     value: Date,
     mode: 'date' | 'time',
     onChange: (event: DateTimePickerEvent, date?: Date) => void,
-    onClose: () => void
+    onClose: () => void,
+    onConfirm: () => void
   ) => (
     <Modal
       visible={visible}
@@ -168,20 +181,18 @@ export const AddSessionScreen: React.FC = () => {
         <View className="flex-1 justify-end">
           <Pressable onPress={e => e.stopPropagation()}>
             <View className="bg-gray-100 rounded-t-xl">
-              {/* Toolbar */}
               <View className="flex-row justify-between items-center p-4 bg-gray-50 rounded-t-xl border-b border-gray-200">
                 <TouchableOpacity onPress={onClose}>
                   <Text className="text-[#4B6BFB] text-base font-medium">Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => {
-                  onChange({ type: 'set', nativeEvent: { timestamp: value.getTime() } }, value);
+                  onConfirm();
                   onClose();
                 }}>
                   <Text className="text-[#4B6BFB] text-base font-medium">Done</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Picker */}
               <View className="bg-white px-4">
                 <View className="items-center justify-center">
                   <DateTimePicker
@@ -210,189 +221,199 @@ export const AddSessionScreen: React.FC = () => {
   );
 
   return (
-    <Pressable 
-      className="flex-1 justify-center items-center bg-black/50"
-      onPress={() => navigation.goBack()}
-    >
-      <Pressable 
-        className="bg-white rounded-3xl p-6 mx-4"
-        style={{ maxWidth: 400, width: '100%' }}
-        onPress={e => e.stopPropagation()}
-      >
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View className="flex-row justify-between items-center mb-6">
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text className="text-[#4B6BFB] font-medium text-base">Cancel</Text>
-            </TouchableOpacity>
-            <Text className="text-xl font-semibold">Add Session</Text>
-            <TouchableOpacity 
-              onPress={handleAddSession}
-              disabled={loading}
-              className="opacity-100 disabled:opacity-50"
-            >
-              <Text className="text-[#4B6BFB] font-medium text-base">
-                {loading ? 'Adding...' : 'Add'}
-              </Text>
-            </TouchableOpacity>
+    <SafeAreaView className="flex-1 bg-gray-50">
+      <View className="px-4 py-2">
+        {/* Header */}
+        <View className="flex-row items-center mb-6">
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            className="mr-3"
+          >
+            <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
+          </TouchableOpacity>
+          <Text className="text-2xl font-semibold text-gray-800">
+            {isGroupSession ? 'Add Group Session' : 'Add Study Session'}
+          </Text>
+        </View>
+
+        {/* Form */}
+        <View className="space-y-4">
+          <View>
+            <Text className="text-gray-600 mb-1">Subject</Text>
+            <TextInput
+              className="bg-white p-3 rounded-lg border border-gray-200"
+              placeholder="Enter subject"
+              value={subject}
+              onChangeText={setSubject}
+            />
           </View>
 
-          {/* Form */}
-          <View className="space-y-5">
-            {/* Subject Input */}
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Subject</Text>
-              <TextInput
-                className="bg-gray-50 p-4 rounded-xl border border-gray-200"
-                placeholder="Enter subject name"
-                value={subject}
-                onChangeText={setSubject}
-                autoCapitalize="words"
-              />
-            </View>
-
-            {/* Start Date/Time */}
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Start</Text>
-              <View className="flex-row space-x-2">
-                <TouchableOpacity 
-                  onPress={() => setShowStartDate(true)}
-                  className="flex-1 bg-gray-50 p-4 rounded-xl border border-gray-200"
-                >
-                  <Text className="text-gray-600">{formatDate(startDate)}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  onPress={() => setShowStartTime(true)}
-                  className="flex-1 bg-gray-50 p-4 rounded-xl border border-gray-200"
-                >
-                  <Text className="text-gray-600">{formatTime(startDate)}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* End Date/Time */}
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">End</Text>
-              <View className="flex-row space-x-2">
-                <TouchableOpacity 
-                  onPress={() => setShowEndDate(true)}
-                  className="flex-1 bg-gray-50 p-4 rounded-xl border border-gray-200"
-                >
-                  <Text className="text-gray-600">{formatDate(endDate)}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  onPress={() => setShowEndTime(true)}
-                  className="flex-1 bg-gray-50 p-4 rounded-xl border border-gray-200"
-                >
-                  <Text className="text-gray-600">{formatTime(endDate)}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Notes */}
-            <View>
-              <Text className="text-gray-700 font-medium mb-2">Notes (Optional)</Text>
-              <TextInput
-                className="bg-gray-50 p-4 rounded-xl border border-gray-200 min-h-[100]"
-                placeholder="Add any notes about this session"
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* Duration Display */}
-            <View className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-              <Text className="text-gray-600 text-center">
-                Duration: {formatDuration(calculateDuration())}
-              </Text>
+          {/* Start Date/Time */}
+          <View>
+            <Text className="text-gray-600 mb-1">Start</Text>
+            <View className="flex-row space-x-2">
+              <TouchableOpacity 
+                onPress={() => setShowStartDate(true)}
+                className="flex-1 bg-white p-3 rounded-lg border border-gray-200"
+              >
+                <Text className="text-gray-600">{formatDate(startDate)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => setShowStartTime(true)}
+                className="flex-1 bg-white p-3 rounded-lg border border-gray-200"
+              >
+                <Text className="text-gray-600">{formatTime(startDate)}</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
 
-        {/* iOS Date/Time Pickers */}
-        {Platform.OS === 'ios' && (
-          <>
-            {renderIOSPickerModal(
-              showStartDate,
-              startDate,
-              'date',
-              handleStartDateChange,
-              () => setShowStartDate(false)
-            )}
-            {renderIOSPickerModal(
-              showStartTime,
-              startDate,
-              'time',
-              handleStartTimeChange,
-              () => setShowStartTime(false)
-            )}
-            {renderIOSPickerModal(
-              showEndDate,
-              endDate,
-              'date',
-              handleEndDateChange,
-              () => setShowEndDate(false)
-            )}
-            {renderIOSPickerModal(
-              showEndTime,
-              endDate,
-              'time',
-              handleEndTimeChange,
-              () => setShowEndTime(false)
-            )}
-          </>
-        )}
+          {/* End Date/Time */}
+          <View>
+            <Text className="text-gray-600 mb-1">End</Text>
+            <View className="flex-row space-x-2">
+              <TouchableOpacity 
+                onPress={() => setShowEndDate(true)}
+                className="flex-1 bg-white p-3 rounded-lg border border-gray-200"
+              >
+                <Text className="text-gray-600">{formatDate(endDate)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => setShowEndTime(true)}
+                className="flex-1 bg-white p-3 rounded-lg border border-gray-200"
+              >
+                <Text className="text-gray-600">{formatTime(endDate)}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
-        {/* Android Date/Time Pickers */}
-        {Platform.OS === 'android' && (
-          <>
-            {showStartDate && (
-              <DateTimePicker
-                value={startDate}
-                mode="date"
-                onChange={(event, date) => {
-                  setShowStartDate(false);
-                  if (date) handleStartDateChange(event, date);
-                }}
-              />
-            )}
-            {showStartTime && (
-              <DateTimePicker
-                value={startDate}
-                mode="time"
-                onChange={(event, date) => {
-                  setShowStartTime(false);
-                  if (date) handleStartTimeChange(event, date);
-                }}
-                minuteInterval={5}
-              />
-            )}
-            {showEndDate && (
-              <DateTimePicker
-                value={endDate}
-                mode="date"
-                onChange={(event, date) => {
-                  setShowEndDate(false);
-                  if (date) handleEndDateChange(event, date);
-                }}
-              />
-            )}
-            {showEndTime && (
-              <DateTimePicker
-                value={endDate}
-                mode="time"
-                onChange={(event, date) => {
-                  setShowEndTime(false);
-                  if (date) handleEndTimeChange(event, date);
-                }}
-                minuteInterval={5}
-              />
-            )}
-          </>
-        )}
-      </Pressable>
-    </Pressable>
+          {/* Notes */}
+          <View>
+            <Text className="text-gray-600 mb-1">Notes (Optional)</Text>
+            <TextInput
+              className="bg-white p-3 rounded-lg border border-gray-200 min-h-[100]"
+              placeholder="Add any notes about this session"
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              textAlignVertical="top"
+            />
+          </View>
+
+          {/* Duration Display */}
+          <View className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <Text className="text-gray-600 text-center">
+              Duration: {formatDuration(calculateDuration())}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            className="bg-[#4B6BFB] p-4 rounded-lg mt-4"
+            onPress={handleAddSession}
+          >
+            <Text className="text-white text-center font-semibold">
+              {isGroupSession ? 'Add Group Session' : 'Add Session'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* iOS Date/Time Pickers */}
+      {Platform.OS === 'ios' && (
+        <>
+          {renderIOSPickerModal(
+            showStartDate,
+            tempStartDate,
+            'date',
+            handleStartDateChange,
+            () => setShowStartDate(false),
+            confirmStartDateTime
+          )}
+          {renderIOSPickerModal(
+            showStartTime,
+            tempStartDate,
+            'time',
+            handleStartTimeChange,
+            () => setShowStartTime(false),
+            confirmStartDateTime
+          )}
+          {renderIOSPickerModal(
+            showEndDate,
+            tempEndDate,
+            'date',
+            handleEndDateChange,
+            () => setShowEndDate(false),
+            confirmEndDateTime
+          )}
+          {renderIOSPickerModal(
+            showEndTime,
+            tempEndDate,
+            'time',
+            handleEndTimeChange,
+            () => setShowEndTime(false),
+            confirmEndDateTime
+          )}
+        </>
+      )}
+
+      {/* Android Date/Time Pickers */}
+      {Platform.OS === 'android' && (
+        <>
+          {showStartDate && (
+            <DateTimePicker
+              value={tempStartDate}
+              mode="date"
+              onChange={(event, date) => {
+                if (date) {
+                  handleStartDateChange(event, date);
+                  confirmStartDateTime();
+                }
+                setShowStartDate(false);
+              }}
+            />
+          )}
+          {showStartTime && (
+            <DateTimePicker
+              value={tempStartDate}
+              mode="time"
+              onChange={(event, date) => {
+                if (date) {
+                  handleStartTimeChange(event, date);
+                  confirmStartDateTime();
+                }
+                setShowStartTime(false);
+              }}
+              minuteInterval={5}
+            />
+          )}
+          {showEndDate && (
+            <DateTimePicker
+              value={tempEndDate}
+              mode="date"
+              onChange={(event, date) => {
+                if (date) {
+                  handleEndDateChange(event, date);
+                  confirmEndDateTime();
+                }
+                setShowEndDate(false);
+              }}
+            />
+          )}
+          {showEndTime && (
+            <DateTimePicker
+              value={tempEndDate}
+              mode="time"
+              onChange={(event, date) => {
+                if (date) {
+                  handleEndTimeChange(event, date);
+                  confirmEndDateTime();
+                }
+                setShowEndTime(false);
+              }}
+              minuteInterval={5}
+            />
+          )}
+        </>
+      )}
+    </SafeAreaView>
   );
 }; 

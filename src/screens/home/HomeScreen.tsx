@@ -43,9 +43,11 @@ const StatsCard: React.FC<StatsCardProps> = ({ value, label }) => (
 );
 
 interface SessionCardProps {
+  id: number;
   subject: string;
   date: string;
   duration: string;
+  onPress: () => void;
 }
 
 interface StudySession {
@@ -56,14 +58,17 @@ interface StudySession {
   user_id: string;
 }
 
-const SessionCard: React.FC<SessionCardProps> = ({ subject, date, duration }) => (
-  <View className="bg-white rounded-xl p-4 shadow-sm mb-3 flex-row justify-between items-center">
-    <View>
-      <Text className="text-lg font-semibold text-gray-800">{subject}</Text>
+const SessionCard: React.FC<SessionCardProps> = ({ id, subject, date, duration, onPress }) => (
+  <TouchableOpacity 
+    onPress={onPress}
+    className="bg-white rounded-xl p-4 shadow-sm mb-3"
+  >
+    <Text className="text-lg font-semibold text-gray-800">{subject}</Text>
+    <View className="flex-row justify-between items-center">
       <Text className="text-gray-500">{date}</Text>
+      <Text className="text-[#4B6BFB] font-medium">{duration}</Text>
     </View>
-    <Text className="text-[#4B6BFB] font-medium">{formatDuration(Number(duration))}</Text>
-  </View>
+  </TouchableOpacity>
 );
 
 export const HomeScreen: React.FC = () => {
@@ -116,18 +121,19 @@ export const HomeScreen: React.FC = () => {
     try {
       if (!userData?.id) return;
       
-      // Fetch all sessions for the current user
+      // Fetch all sessions for the current user that are not group sessions
       const { data: allSessions, error } = await supabase
         .from('study_sessions')
         .select('*')
         .eq('user_id', userData.id)
+        .is('group_id', null) // Only fetch sessions that are not part of any group
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       setSessions(allSessions || []);
 
-      // Calculate weekly hours
+      // Calculate weekly hours (only from individual sessions)
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
       
@@ -179,31 +185,33 @@ export const HomeScreen: React.FC = () => {
   const fetchStudyGroups = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('No user found');
+        return;
+      }
 
-      // First get groups where user is a member
-      const { data: memberGroups, error: memberError } = await supabase
+      // Get groups where user is a member using inner join
+      const { data: groups, error } = await supabase
         .from('study_groups')
-        .select('*, members:group_members(*)')
-        .eq('members.user_id', user.id);
+        .select(`
+          *,
+          group_members!inner (
+            user_id,
+            role
+          )
+        `)
+        .eq('group_members.user_id', user.id)
+        .order('created_at', { ascending: false });
 
-      if (memberError) throw memberError;
+      if (error) {
+        console.error('Error fetching groups:', error);
+        return;
+      }
 
-      // Then get groups where user is the creator
-      const { data: createdGroups, error: creatorError } = await supabase
-        .from('study_groups')
-        .select('*, members:group_members(*)')
-        .eq('creator_id', user.id);
-
-      if (creatorError) throw creatorError;
-
-      // Combine and deduplicate groups
-      const allGroups = [...(memberGroups || []), ...(createdGroups || [])];
-      const uniqueGroups = Array.from(new Map(allGroups.map(group => [group.id, group])).values());
-      
-      setStudyGroups(uniqueGroups);
+      setStudyGroups(groups || []);
     } catch (error) {
       console.error('Error fetching study groups:', error);
+      setStudyGroups([]);
     }
   };
 
@@ -277,12 +285,14 @@ export const HomeScreen: React.FC = () => {
                   No study sessions yet. Add your first one!
                 </Text>
               ) : (
-                sessions.slice(0, 3).map(session => (
+                sessions.slice(0, 3).map((session) => (
                   <SessionCard
                     key={session.id}
+                    id={session.id}
                     subject={session.subject}
                     date={formatDate(session.created_at)}
-                    duration={session.duration.toString()}
+                    duration={formatDuration(session.duration)}
+                    onPress={() => navigation.navigate('SessionDetails', { sessionId: session.id })}
                   />
                 ))
               )}

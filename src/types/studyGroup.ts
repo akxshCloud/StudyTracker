@@ -18,22 +18,36 @@ export interface GroupMember {
   user_id: string;
   role: 'admin' | 'member';
   joined_at: string;
-  user: UserProfile;
+  user: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  };
 }
 
 export interface GroupTask {
   id: string;
   group_id: string;
   title: string;
-  description?: string;
+  description: string;
   status: 'pending' | 'completed';
   assigned_to?: string;
   due_date?: string;
   created_at: string;
   created_by: string;
+  assignee?: UserProfile;
 }
 
 export interface StudyGroupWithMembers extends StudyGroup {
   members: GroupMember[];
   tasks: GroupTask[];
+}
+
+export interface StudySession {
+  id: number;
+  subject: string;
+  duration: number;
+  created_at: string;
+  user_id: string;
+  group_id?: string;
 } 
