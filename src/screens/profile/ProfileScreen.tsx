@@ -179,7 +179,12 @@ export const ProfileScreen: React.FC = () => {
       if (updateError) throw updateError;
 
       setAvatarUrl(publicUrl);
-      Alert.alert('Success', 'Profile picture updated successfully');
+      Alert.alert('Success', 'Profile picture updated successfully', [
+        {
+          text: 'OK',
+          onPress: () => navigation.goBack()
+        }
+      ]);
     } catch (error) {
       console.error('Error uploading image:', error);
       Alert.alert('Error', 'Failed to upload image');

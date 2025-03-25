@@ -111,10 +111,31 @@ export const HomeScreen: React.FC = () => {
   useFocusEffect(
     React.useCallback(() => {
       if (userData?.id) {
+        // Fetch profile data including avatar_url
+        const fetchProfileData = async () => {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('full_name, avatar_url, bio, created_at, updated_at')
+            .eq('id', userData.id)
+            .single();
+
+          if (profileData) {
+            setProfileData({
+              id: userData.id,
+              full_name: profileData.full_name,
+              avatar_url: profileData.avatar_url,
+              bio: profileData.bio
+            });
+          }
+        };
+
+        fetchProfileData();
         fetchSessions();
         fetchStudyGroups();
       }
-    }, [userData])
+      // Adding an empty cleanup function to satisfy the useCallback hook
+      return () => {};
+    }, [userData]) // Only depend on userData to prevent unnecessary refreshes
   );
 
   const fetchSessions = async () => {
@@ -190,25 +211,104 @@ export const HomeScreen: React.FC = () => {
         return;
       }
 
-      // Get groups where user is a member using inner join
-      const { data: groups, error } = await supabase
-        .from('study_groups')
-        .select(`
-          *,
-          group_members!inner (
-            user_id,
-            role
-          )
-        `)
-        .eq('group_members.user_id', user.id)
-        .order('created_at', { ascending: false });
+      // 1. First get the group IDs where the user is a member
+      const { data: memberGroups, error: memberError } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', user.id);
 
-      if (error) {
-        console.error('Error fetching groups:', error);
+      if (memberError) {
+        console.error('Error fetching member groups:', memberError);
         return;
       }
 
-      setStudyGroups(groups || []);
+      if (!memberGroups || memberGroups.length === 0) {
+        setStudyGroups([]);
+        return;
+      }
+
+      const groupIds = memberGroups.map(mg => mg.group_id);
+
+      // 2. Then get the study groups data for these IDs
+      const { data: groups, error: groupsError } = await supabase
+        .from('study_groups')
+        .select('*')
+        .in('id', groupIds);
+
+      if (groupsError) {
+        console.error('Error fetching groups:', groupsError);
+        return;
+      }
+
+      if (!groups) {
+        setStudyGroups([]);
+        return;
+      }
+
+      // 3. Get all members for these groups
+      const { data: membersData, error: membersError } = await supabase
+        .from('group_members')
+        .select('*')
+        .in('group_id', groupIds);
+
+      if (membersError) {
+        console.error('Error fetching members:', membersError);
+        return;
+      }
+
+      // 4. Get profiles for all members
+      const memberUserIds = membersData?.map(member => member.user_id) || [];
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('id', memberUserIds);
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        return;
+      }
+
+      // 5. Get auth users data
+      const { data: authUsersData, error: authUsersError } = await supabase
+        .from('auth_users_view')
+        .select('*')
+        .in('id', memberUserIds);
+
+      if (authUsersError) {
+        console.error('Error fetching auth users:', authUsersError);
+        return;
+      }
+
+      // Combine all the data
+      const transformedGroups = groups.map(group => {
+        const groupMembers = membersData
+          ?.filter(member => member.group_id === group.id)
+          .map(member => {
+            const profile = profilesData?.find(p => p.id === member.user_id);
+            const authUser = authUsersData?.find(u => u.id === member.user_id);
+            
+            return {
+              user_id: member.user_id,
+              role: member.role,
+              user: {
+                full_name: profile?.full_name || null,
+                avatar_url: profile?.avatar_url || null,
+                email: authUser?.email || null
+              }
+            };
+          }) || [];
+
+        return {
+          id: group.id,
+          name: group.name,
+          created_at: group.created_at,
+          creator_id: group.creator_id,
+          total_hours: group.total_hours,
+          group_members: groupMembers
+        };
+      });
+
+      setStudyGroups(transformedGroups);
     } catch (error) {
       console.error('Error fetching study groups:', error);
       setStudyGroups([]);

@@ -4,6 +4,14 @@ export interface StudyGroup {
   created_at: string;
   creator_id: string;
   total_hours: number;
+  group_members?: {
+    user_id: string;
+    role: string;
+    user: {
+      full_name: string | null;
+      avatar_url: string | null;
+    };
+  }[];
 }
 
 export interface UserProfile {
