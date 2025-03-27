@@ -9,6 +9,7 @@ import { AddGroupTaskScreen } from '../screens/groups/AddGroupTaskScreen';
 import { TaskDetailsScreen } from '../screens/groups/TaskDetailsScreen';
 import { SessionDetailsScreen } from '../screens/sessions/SessionDetailsScreen';
 import { AddGroupMemberScreen } from '../screens/groups/AddGroupMemberScreen';
+import { EditGroupScreen } from '../screens/groups/EditGroupScreen';
 
 export type RootStackParamList = {
   Loading: undefined;
@@ -40,6 +41,7 @@ export const AppNavigator: React.FC = () => {
       <Stack.Screen name="AddSession" component={AddSessionScreen} />
       <Stack.Screen name="StudyGroup" component={StudyGroupScreen} />
       <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+      <Stack.Screen name="EditGroup" component={EditGroupScreen} />
       <Stack.Screen name="AddGroupTask" component={AddGroupTaskScreen} />
       <Stack.Screen name="TaskDetails" component={TaskDetailsScreen} />
       <Stack.Screen name="SessionDetails" component={SessionDetailsScreen} />

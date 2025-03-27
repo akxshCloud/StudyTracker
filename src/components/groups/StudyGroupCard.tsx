@@ -60,7 +60,7 @@ export const StudyGroupCard: React.FC<StudyGroupCardProps> = ({ group, index, on
         zIndex: 10 - index,
       }}
     >
-      <View className="p-4">
+      <View className="p-3">
         <View className="flex-row justify-between items-center">
           <Text className="text-lg font-semibold text-gray-800">{group.name}</Text>
           
@@ -71,9 +71,9 @@ export const StudyGroupCard: React.FC<StudyGroupCardProps> = ({ group, index, on
                 key={member.user_id}
                 className="rounded-full overflow-hidden border-2 border-white"
                 style={{
-                  width: 32,
-                  height: 32,
-                  marginLeft: idx === 0 ? 0 : -12,
+                  width: 28,
+                  height: 28,
+                  marginLeft: idx === 0 ? 0 : -10,
                   zIndex: 3 - idx,
                 }}
               >
@@ -87,9 +87,9 @@ export const StudyGroupCard: React.FC<StudyGroupCardProps> = ({ group, index, on
               <View 
                 className="rounded-full bg-gray-200 border-2 border-white justify-center items-center"
                 style={{
-                  width: 32,
-                  height: 32,
-                  marginLeft: -12,
+                  width: 28,
+                  height: 28,
+                  marginLeft: -10,
                 }}
               >
                 <Text className="text-xs text-gray-600">+{group.group_members.length - 3}</Text>

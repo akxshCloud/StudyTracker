@@ -491,7 +491,12 @@ export const StudyGroupScreen: React.FC = () => {
                 <TouchableOpacity
                   key={task.id}
                   className="bg-white rounded-xl p-4 shadow-sm mb-3"
-                  onPress={() => navigation.navigate('TaskDetails', { taskId: Number(task.id) })}
+                  onPress={() => {
+                    const taskId = parseInt(task.id);
+                    if (!isNaN(taskId)) {
+                      navigation.navigate('TaskDetails', { taskId });
+                    }
+                  }}
                 >
                   <Text className="text-lg font-semibold text-gray-800 mb-1">{task.title}</Text>
                   <View className="flex-row justify-between items-center">

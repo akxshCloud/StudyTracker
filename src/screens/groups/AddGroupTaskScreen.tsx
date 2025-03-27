@@ -94,7 +94,7 @@ export const AddGroupTaskScreen: React.FC = () => {
         };
       });
 
-      setMembers(transformedMembers);
+        setMembers(transformedMembers);
     } catch (error) {
       console.log('Error in fetchGroupMembers:', error);
       setMembers([]);
@@ -428,17 +428,17 @@ export const AddGroupTaskScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
+          {/* Header */}
       <View className="px-4 py-2 flex-row justify-between items-center border-b border-gray-100 bg-white">
-        <View className="flex-row items-center">
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
             className="mr-3 p-2"
-          >
-            <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
-          </TouchableOpacity>
-          <Text className="text-2xl font-semibold text-gray-800">New Task</Text>
-        </View>
+              >
+                <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
+              </TouchableOpacity>
+              <Text className="text-2xl font-semibold text-gray-800">New Task</Text>
+            </View>
         <TouchableOpacity 
           onPress={handleCreateTask}
           disabled={loading}
@@ -446,7 +446,7 @@ export const AddGroupTaskScreen: React.FC = () => {
         >
           <Ionicons name="checkmark" size={22} color="white" />
         </TouchableOpacity>
-      </View>
+          </View>
 
       <ScrollView className="flex-1 pt-4">
         {/* Task Details Card */}
