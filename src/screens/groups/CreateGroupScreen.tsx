@@ -21,6 +21,7 @@ type CreateGroupScreenNavigationProp = NativeStackNavigationProp<RootStackParamL
 export const CreateGroupScreen: React.FC = () => {
   const navigation = useNavigation<CreateGroupScreenNavigationProp>();
   const [groupName, setGroupName] = useState('');
+  const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleCreateGroup = async () => {
@@ -44,6 +45,7 @@ export const CreateGroupScreen: React.FC = () => {
         .insert([
           {
             name: groupName.trim(),
+            description: description.trim() || null,
             creator_id: user.id,
           },
         ])
@@ -75,52 +77,61 @@ export const CreateGroupScreen: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header with back button */}
-      <View className="flex-row items-center px-4 py-2 border-b border-gray-200">
+      {/* Header */}
+      <View className="px-4 py-2 flex-row justify-between items-center border-b border-gray-100 bg-white">
+        <View className="flex-row items-center">
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            className="mr-3 p-2"
+          >
+            <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
+          </TouchableOpacity>
+          <Text className="text-2xl font-semibold text-gray-800">Create Group</Text>
+        </View>
         <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          className="p-2 -ml-2"
+          onPress={handleCreateGroup}
+          disabled={loading}
+          className="p-2 bg-[#4B6BFB] rounded-full"
         >
-          <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
+          <Ionicons name="checkmark" size={22} color="white" />
         </TouchableOpacity>
-        <Text className="text-xl font-semibold ml-2">Create Group</Text>
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
-        <ScrollView className="flex-1">
-          <View className="px-4 py-2">
-            <View className="mb-6">
-              <Text className="text-gray-500">
-                Create a new study group and invite your friends
-              </Text>
-            </View>
+        <ScrollView className="flex-1 pt-4">
+          {/* Group Details Card */}
+          <View className="bg-white rounded-xl shadow-sm mx-4 flex-1">
+            <View className="p-8">
+              <View className="mb-8">
+                <Text className="text-gray-500 text-sm mb-2">Group Name *</Text>
+                <TextInput
+                  value={groupName}
+                  onChangeText={setGroupName}
+                  placeholder="Enter group name"
+                  className="border border-gray-200 rounded-2xl px-4 h-12 text-gray-800 text-base bg-gray-50 flex items-center"
+                  placeholderTextColor="#999"
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              </View>
 
-            <View className="mb-6">
-              <Text className="text-gray-700 mb-2 font-medium">Group Name</Text>
-              <TextInput
-                className="bg-white border border-gray-200 rounded-xl px-4 py-3"
-                placeholder="Enter group name"
-                value={groupName}
-                onChangeText={setGroupName}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
+              <View>
+                <Text className="text-gray-500 text-sm mb-2">Description (Optional)</Text>
+                <TextInput
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Add a description for your group"
+                  multiline
+                  numberOfLines={4}
+                  className="border border-gray-200 rounded-2xl px-4 py-2.5 text-gray-800 text-base bg-gray-50 min-h-[120px]"
+                  placeholderTextColor="#999"
+                  textAlignVertical="top"
+                />
+              </View>
             </View>
-
-            <TouchableOpacity
-              className={`bg-[#4B6BFB] rounded-xl py-4 items-center ${
-                loading ? 'opacity-50' : ''
-              }`}
-              onPress={handleCreateGroup}
-              disabled={loading}
-            >
-              <Text className="text-white font-semibold text-lg">
-                {loading ? 'Creating...' : 'Create Group'}
-              </Text>
-            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

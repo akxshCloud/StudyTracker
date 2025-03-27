@@ -7,6 +7,7 @@ import {
   Alert,
   ScrollView,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
@@ -19,6 +20,7 @@ import { GroupMember } from '../../types/studyGroup';
 
 type AddGroupTaskScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddGroupTask'>;
 type AddGroupTaskScreenRouteProp = RouteProp<RootStackParamList, 'AddGroupTask'>;
+type DateOption = 'today' | 'tomorrow' | 'next_week' | 'custom';
 
 export const AddGroupTaskScreen: React.FC = () => {
   const navigation = useNavigation<AddGroupTaskScreenNavigationProp>();
@@ -28,12 +30,13 @@ export const AddGroupTaskScreen: React.FC = () => {
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [members, setMembers] = useState<GroupMember[]>([]);
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [members, setMembers] = useState<GroupMember[]>([]);
 
   useEffect(() => {
     fetchGroupMembers();
-  }, []);
+  }, [route.params.groupId]);
 
   const fetchGroupMembers = async () => {
     try {
@@ -43,28 +46,41 @@ export const AddGroupTaskScreen: React.FC = () => {
         return;
       }
 
-      const { data: membersData, error } = await supabase
+      // First get all group members
+      const { data: membersData, error: membersError } = await supabase
         .from('group_members')
-        .select(`
-          id,
-          user_id,
-          role,
-          user:profiles!inner(
-            id,
-            full_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('group_id', route.params.groupId);
 
-      if (error) {
-        console.log('No members found or error fetching members:', error.message);
+      if (membersError) {
+        console.log('Error fetching members:', membersError.message);
         setMembers([]);
         return;
       }
 
-      if (membersData && membersData.length > 0) {
-        const transformedMembers: GroupMember[] = membersData.map((member: any) => ({
+      if (!membersData || membersData.length === 0) {
+        console.log('No members found for this group');
+        setMembers([]);
+        return;
+      }
+
+      // Then get their profiles
+      const memberIds = membersData.map(member => member.user_id);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', memberIds);
+
+      if (profilesError) {
+        console.log('Error fetching profiles:', profilesError.message);
+        setMembers([]);
+        return;
+      }
+
+      // Transform the data
+      const transformedMembers: GroupMember[] = membersData.map(member => {
+        const profile = profilesData?.find(p => p.id === member.user_id);
+        return {
           id: member.id,
           group_id: route.params.groupId,
           user_id: member.user_id,
@@ -72,15 +88,13 @@ export const AddGroupTaskScreen: React.FC = () => {
           joined_at: member.joined_at || new Date().toISOString(),
           user: {
             id: member.user_id,
-            full_name: member.user?.full_name || null,
-            avatar_url: member.user?.avatar_url || null
+            full_name: profile?.full_name || 'Unknown User',
+            avatar_url: profile?.avatar_url || null
           }
-        }));
-        setMembers(transformedMembers);
-      } else {
-        console.log('No members found for this group');
-        setMembers([]);
-      }
+        };
+      });
+
+      setMembers(transformedMembers);
     } catch (error) {
       console.log('Error in fetchGroupMembers:', error);
       setMembers([]);
@@ -127,63 +141,345 @@ export const AddGroupTaskScreen: React.FC = () => {
     }
   };
 
-  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDueDate(selectedDate);
-    }
+  const formatDate = (date: Date) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = date.getDate();
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
+  const getDaysInMonth = (year: number, month: number) => {
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (year: number, month: number) => {
+    return new Date(year, month, 1).getDay();
+  };
+
+  const CustomCalendar = ({
+    selectedDate,
+    onSelectDate,
+  }: {
+    selectedDate: Date;
+    onSelectDate: (date: Date) => void;
+  }) => {
+    const [displayDate, setDisplayDate] = useState(selectedDate);
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    const year = displayDate.getFullYear();
+    const month = displayDate.getMonth();
+    const daysInMonth = getDaysInMonth(year, month);
+    const firstDayOfMonth = getFirstDayOfMonth(year, month);
+
+    const goToPreviousMonth = () => {
+      setDisplayDate(new Date(year, month - 1, 1));
+    };
+
+    const goToNextMonth = () => {
+      setDisplayDate(new Date(year, month + 1, 1));
+    };
+
+    const isSelectedDate = (date: Date) => {
+      return date.toDateString() === selectedDate.toDateString();
+    };
+
+    const isToday = (date: Date) => {
+      return date.toDateString() === new Date().toDateString();
+    };
+
+    return (
+      <View className="w-full">
+        {/* Month and Year Header */}
+        <View className="flex-row justify-between items-center mb-6">
+          <TouchableOpacity onPress={goToPreviousMonth} className="w-12 h-12 items-center justify-center">
+            <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
+          </TouchableOpacity>
+          <Text className="text-2xl font-semibold text-gray-800">
+            {months[month]} {year}
+          </Text>
+          <TouchableOpacity onPress={goToNextMonth} className="w-12 h-12 items-center justify-center">
+            <Ionicons name="chevron-forward" size={24} color="#4B6BFB" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Weekday Headers */}
+        <View className="flex-row justify-between mb-2">
+          {weekDays.map((day) => (
+            <View key={day} className="flex-1 items-center">
+              <Text className="text-sm font-medium text-gray-500">{day}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Calendar Grid */}
+        <View className="flex-row flex-wrap">
+          {Array.from({ length: firstDayOfMonth }).map((_, index) => (
+            <View key={`empty-${index}`} className="w-[14.28%] h-10" />
+          ))}
+
+          {Array.from({ length: daysInMonth }).map((_, index) => {
+            const date = new Date(year, month, index + 1);
+            const isSelected = isSelectedDate(date);
+            const isTodayDate = isToday(date);
+
+            return (
+              <TouchableOpacity
+                key={index}
+                onPress={() => onSelectDate(date)}
+                className="w-[14.28%] h-10 items-center justify-center"
+              >
+                <View className={`w-10 h-10 items-center justify-center rounded-full ${
+                  isSelected ? 'bg-[#4B6BFB]' : ''
+                }`}>
+                  <Text className={`text-base ${
+                    isSelected
+                      ? 'text-white font-medium'
+                      : isTodayDate
+                      ? 'text-[#4B6BFB] font-medium'
+                      : 'text-gray-800'
+                  }`}>
+                    {index + 1}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const DatePickerModal = () => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    const handleDateOption = (option: DateOption) => {
+      switch (option) {
+        case 'today':
+          setDueDate(new Date());
+          setShowDatePicker(false);
+          break;
+        case 'tomorrow':
+          setDueDate(tomorrow);
+          setShowDatePicker(false);
+          break;
+        case 'next_week':
+          setDueDate(nextWeek);
+          setShowDatePicker(false);
+          break;
+        case 'custom':
+          setShowDatePicker(false);
+          setShowCustomDatePicker(true);
+          break;
+      }
+    };
+
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showDatePicker}
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <TouchableOpacity
+          className="flex-1 bg-black/50"
+          activeOpacity={1}
+          onPress={() => setShowDatePicker(false)}
+        >
+          <View className="flex-1 justify-end">
+            <View className="bg-white rounded-t-3xl">
+              <View className="p-6 border-b border-gray-100">
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text className="text-xl font-semibold text-gray-800">Select Due Date</Text>
+                  <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                    <Ionicons name="close" size={24} color="#9CA3AF" />
+                  </TouchableOpacity>
+                </View>
+                <Text className="text-gray-500">Choose a due date for this task</Text>
+              </View>
+              
+              <View className="p-6">
+                <TouchableOpacity
+                  onPress={() => handleDateOption('today')}
+                  className="flex-row items-center justify-between p-4 mb-3 bg-gray-50 rounded-xl"
+                >
+                  <View className="flex-row items-center">
+                    <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-4">
+                      <Ionicons name="today-outline" size={20} color="#4B6BFB" />
+                    </View>
+                    <Text className="text-base font-medium text-gray-800">Today</Text>
+                  </View>
+                  <Text className="text-gray-500">{formatDate(today)}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleDateOption('tomorrow')}
+                  className="flex-row items-center justify-between p-4 mb-3 bg-gray-50 rounded-xl"
+                >
+                  <View className="flex-row items-center">
+                    <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-4">
+                      <Ionicons name="calendar-outline" size={20} color="#4B6BFB" />
+                    </View>
+                    <Text className="text-base font-medium text-gray-800">Tomorrow</Text>
+                  </View>
+                  <Text className="text-gray-500">{formatDate(tomorrow)}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleDateOption('next_week')}
+                  className="flex-row items-center justify-between p-4 mb-3 bg-gray-50 rounded-xl"
+                >
+                  <View className="flex-row items-center">
+                    <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-4">
+                      <Ionicons name="calendar-outline" size={20} color="#4B6BFB" />
+                    </View>
+                    <Text className="text-base font-medium text-gray-800">Next week</Text>
+                  </View>
+                  <Text className="text-gray-500">{formatDate(nextWeek)}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleDateOption('custom')}
+                  className="flex-row items-center justify-between p-4 bg-gray-50 rounded-xl"
+                >
+                  <View className="flex-row items-center">
+                    <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-4">
+                      <Ionicons name="calendar" size={20} color="#4B6BFB" />
+                    </View>
+                    <Text className="text-base font-medium text-gray-800">Custom date</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
+
+  const CustomDatePickerModal = () => {
+    const [tempSelectedDate, setTempSelectedDate] = useState<Date>(dueDate || new Date());
+
+    const handleConfirm = () => {
+      setDueDate(tempSelectedDate);
+      setShowCustomDatePicker(false);
+    };
+
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showCustomDatePicker}
+        onRequestClose={() => setShowCustomDatePicker(false)}
+      >
+        <TouchableOpacity
+          className="flex-1 bg-black/50"
+          activeOpacity={1}
+          onPress={() => setShowCustomDatePicker(false)}
+        >
+          <View className="flex-1 justify-end">
+            <TouchableOpacity 
+              activeOpacity={1}
+              className="bg-white rounded-t-3xl"
+            >
+              <View className="p-6 border-b border-gray-100">
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text className="text-xl font-semibold text-gray-800">Choose Date</Text>
+                  <TouchableOpacity onPress={() => setShowCustomDatePicker(false)}>
+                    <Ionicons name="close" size={24} color="#9CA3AF" />
+                  </TouchableOpacity>
+                </View>
+                <Text className="text-gray-500">Select a specific date</Text>
+              </View>
+              
+              <View className="px-4 pt-4 pb-6">
+                <CustomCalendar
+                  selectedDate={tempSelectedDate}
+                  onSelectDate={setTempSelectedDate}
+                />
+                
+                <View className="mt-4 flex-row justify-end border-t border-gray-100 pt-4">
+                  <TouchableOpacity
+                    onPress={() => setShowCustomDatePicker(false)}
+                    className="py-3 px-6 rounded-lg mr-2"
+                  >
+                    <Text className="text-gray-600 font-medium">Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleConfirm}
+                    className="bg-[#4B6BFB] py-3 px-6 rounded-lg"
+                  >
+                    <Text className="text-white font-medium">Confirm</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    );
   };
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView className="flex-1">
-        <View className="px-4 py-2">
-          {/* Header */}
-          <View className="flex-row justify-between items-center mb-6">
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                onPress={() => navigation.goBack()}
-                className="mr-3"
-              >
-                <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
-              </TouchableOpacity>
-              <Text className="text-2xl font-semibold text-gray-800">New Task</Text>
-            </View>
-          </View>
+      {/* Header */}
+      <View className="px-4 py-2 flex-row justify-between items-center border-b border-gray-100 bg-white">
+        <View className="flex-row items-center">
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            className="mr-3 p-2"
+          >
+            <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
+          </TouchableOpacity>
+          <Text className="text-2xl font-semibold text-gray-800">New Task</Text>
+        </View>
+        <TouchableOpacity 
+          onPress={handleCreateTask}
+          disabled={loading}
+          className="p-2 bg-[#4B6BFB] rounded-full"
+        >
+          <Ionicons name="checkmark" size={22} color="white" />
+        </TouchableOpacity>
+      </View>
 
-          {/* Form */}
-          <View className="space-y-4">
-            {/* Title Input */}
-            <View>
-              <Text className="text-gray-700 text-sm mb-1">Title *</Text>
+      <ScrollView className="flex-1 pt-4">
+        {/* Task Details Card */}
+        <View className="bg-white rounded-xl shadow-sm mx-4 flex-1">
+          <View className="p-8">
+            <View className="mb-8">
+              <Text className="text-gray-500 text-sm mb-2">Title *</Text>
               <TextInput
                 value={title}
                 onChangeText={setTitle}
                 placeholder="Enter task title"
-                className="w-full px-4 py-3 rounded-lg bg-white border border-gray-200"
+                className="border border-gray-200 rounded-2xl px-4 h-12 text-gray-800 text-base bg-gray-50 flex items-center"
                 placeholderTextColor="#999"
               />
             </View>
 
-            {/* Description Input */}
-            <View>
-              <Text className="text-gray-700 text-sm mb-1">Description *</Text>
+            <View className="mb-8">
+              <Text className="text-gray-500 text-sm mb-2">Description *</Text>
               <TextInput
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Enter task description"
                 multiline
                 numberOfLines={4}
-                className="w-full px-4 py-3 rounded-lg bg-white border border-gray-200"
+                className="border border-gray-200 rounded-2xl px-4 py-2.5 text-gray-800 text-base bg-gray-50 min-h-[120px]"
                 placeholderTextColor="#999"
                 textAlignVertical="top"
               />
             </View>
 
-            {/* Only show member assignment if there are members */}
             {members.length > 0 && (
-              <View>
-                <Text className="text-gray-700 text-sm mb-1">Assign To (Optional)</Text>
+              <View className="mb-8">
+                <Text className="text-gray-500 text-sm mb-2">Assign To (Optional)</Text>
                 <ScrollView 
                   horizontal 
                   showsHorizontalScrollIndicator={false}
@@ -212,44 +508,29 @@ export const AddGroupTaskScreen: React.FC = () => {
               </View>
             )}
 
-            {/* Due Date Picker */}
             <View>
-              <Text className="text-gray-700 text-sm mb-1">Due Date (Optional)</Text>
+              <Text className="text-gray-500 text-sm mb-2">Due Date (Optional)</Text>
               <TouchableOpacity
                 onPress={() => setShowDatePicker(true)}
-                className="w-full px-4 py-3 rounded-lg bg-white border border-gray-200"
+                className="border border-gray-200 rounded-2xl p-4 flex-row items-center bg-gray-50"
               >
-                <Text className="text-gray-700">
-                  {dueDate ? dueDate.toLocaleDateString() : 'Select due date'}
+                <Ionicons 
+                  name="calendar-outline" 
+                  size={20} 
+                  color="#4B6BFB" 
+                  style={{ marginRight: 8 }}
+                />
+                <Text className="text-gray-800 text-base">
+                  {dueDate ? formatDate(dueDate) : 'Set due date'}
                 </Text>
               </TouchableOpacity>
             </View>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={dueDate || new Date()}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleDateChange}
-                minimumDate={new Date()}
-              />
-            )}
-
-            {/* Create Button */}
-            <TouchableOpacity
-              onPress={handleCreateTask}
-              disabled={loading}
-              className={`w-full py-3 rounded-lg bg-[#4B6BFB] flex-row justify-center items-center mt-4 ${
-                loading ? 'opacity-50' : 'opacity-100'
-              }`}
-            >
-              <Text className="text-white font-semibold text-lg">
-                {loading ? 'Creating...' : 'Create Task'}
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
+
+      <DatePickerModal />
+      <CustomDatePickerModal />
     </SafeAreaView>
   );
 }; 
