@@ -10,6 +10,7 @@ import { TaskDetailsScreen } from '../screens/groups/TaskDetailsScreen';
 import { SessionDetailsScreen } from '../screens/sessions/SessionDetailsScreen';
 import { AddGroupMemberScreen } from '../screens/groups/AddGroupMemberScreen';
 import { EditGroupScreen } from '../screens/groups/EditGroupScreen';
+import { GroupMessagesScreen } from '../screens/groups/GroupMessagesScreen';
 
 export type RootStackParamList = {
   Loading: undefined;
@@ -24,6 +25,7 @@ export type RootStackParamList = {
   AddGroupTask: { groupId: string };
   TaskDetails: { taskId: string };
   SessionDetails: { sessionId: number };
+  GroupMessages: { groupId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -50,6 +52,7 @@ export const AppNavigator: React.FC = () => {
         component={AddGroupMemberScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="GroupMessages" component={GroupMessagesScreen} />
     </Stack.Navigator>
   );
 }; 

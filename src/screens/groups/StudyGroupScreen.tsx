@@ -520,6 +520,20 @@ export const StudyGroupScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+      {/* Floating Chat Button */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('GroupMessages', { groupId: group.id })}
+        className="absolute bottom-6 right-6 w-14 h-14 bg-[#4B6BFB] rounded-full shadow-lg items-center justify-center"
+        style={{
+          elevation: 5,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+        }}
+      >
+        <Ionicons name="chatbubbles" size={24} color="white" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }; 

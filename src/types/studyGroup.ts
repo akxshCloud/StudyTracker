@@ -58,4 +58,17 @@ export interface StudySession {
   created_at: string;
   user_id: string;
   group_id?: string;
+}
+
+export interface GroupMessage {
+  id: string;
+  group_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  sender?: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  };
 } 
