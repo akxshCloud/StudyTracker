@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthInput } from '../../components/auth/AuthInput';
@@ -165,34 +166,45 @@ export const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
 
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
+      
+      // Sign up the user
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
       });
 
-      if (error) {
-        if (error.message.toLowerCase().includes('email')) {
+      if (signUpError) {
+        if (signUpError.message.toLowerCase().includes('email')) {
           setEmailError(true);
-          setEmailErrorMessage(error.message);
+          setEmailErrorMessage(signUpError.message);
           shakeAnimation(emailShakeAnim);
-        } else if (error.message.toLowerCase().includes('password')) {
+        } else if (signUpError.message.toLowerCase().includes('password')) {
           setPasswordError(true);
-          setPasswordErrorMessage(error.message);
+          setPasswordErrorMessage(signUpError.message);
           shakeAnimation(passwordShakeAnim);
         } else {
-          // If we can't determine which field caused the error, show the error on email
           setEmailError(true);
-          setEmailErrorMessage(error.message);
+          setEmailErrorMessage(signUpError.message);
           shakeAnimation(emailShakeAnim);
         }
-        throw error;
+        throw signUpError;
       }
 
-      // If successful, show success message and navigate to login
-      // Note: In most cases, Supabase will send a confirmation email
-      navigation.navigate('Login');
+      // Show success message and direct user to verify email
+      Alert.alert(
+        'Verification Required',
+        'Please check your email for a verification link. Once verified, you can log in to complete your profile.',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Login')
+          }
+        ]
+      );
+
     } catch (error: any) {
-      // Error is already handled above
+      console.error('Signup error:', error);
+      Alert.alert('Error', error.message || 'Failed to create account');
     } finally {
       setLoading(false);
     }

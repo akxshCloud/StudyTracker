@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthInput } from '../../components/auth/AuthInput';
@@ -99,59 +100,70 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     setEmailErrorMessage('');
     setPasswordErrorMessage('');
 
-    if (!email && !password) {
-      setEmailError(true);
-      setPasswordError(true);
-      setEmailErrorMessage('Email is required');
-      setPasswordErrorMessage('Password is required');
-      shakeAnimation(emailShakeAnim);
-      shakeAnimation(passwordShakeAnim);
-      return;
-    }
+    let hasError = false;
 
     if (!email) {
       setEmailError(true);
       setEmailErrorMessage('Email is required');
       shakeAnimation(emailShakeAnim);
-      return;
+      hasError = true;
     }
 
     if (!password) {
       setPasswordError(true);
       setPasswordErrorMessage('Password is required');
       shakeAnimation(passwordShakeAnim);
-      return;
+      hasError = true;
     }
+
+    if (hasError) return;
 
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+
+      // Attempt to sign in
+      const { error: signInError, data: { user } } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) {
-        if (error.message.toLowerCase().includes('email')) {
-          setEmailError(true);
-          setEmailErrorMessage('Invalid email address');
-          shakeAnimation(emailShakeAnim);
-        } else if (error.message.toLowerCase().includes('password')) {
-          setPasswordError(true);
-          setPasswordErrorMessage('Incorrect password');
-          shakeAnimation(passwordShakeAnim);
-        } else {
-          // If we can't determine which field caused the error, show a general error
-          setEmailError(true);
-          setPasswordError(true);
-          setEmailErrorMessage('Invalid credentials');
-          setPasswordErrorMessage('Invalid credentials');
-          shakeAnimation(emailShakeAnim);
-          shakeAnimation(passwordShakeAnim);
-        }
-        throw error;
+      if (signInError) throw signInError;
+
+      if (!user) throw new Error('No user data returned');
+
+      // Check if user has a profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') { // PGRST116 is "not found" error
+        throw profileError;
       }
+
+      // If no profile exists, navigate to create profile
+      if (!profile) {
+        navigation.navigate('CreateProfile');
+        return;
+      }
+
+      // If profile exists, navigate to main app
+      navigation.getParent()?.navigate('Loading');
+
     } catch (error: any) {
-      // Error is already handled above
+      console.error('Login error:', error);
+      if (error.message.toLowerCase().includes('email')) {
+        setEmailError(true);
+        setEmailErrorMessage(error.message);
+        shakeAnimation(emailShakeAnim);
+      } else if (error.message.toLowerCase().includes('password')) {
+        setPasswordError(true);
+        setPasswordErrorMessage(error.message);
+        shakeAnimation(passwordShakeAnim);
+      } else {
+        Alert.alert('Error', error.message);
+      }
     } finally {
       setLoading(false);
     }
