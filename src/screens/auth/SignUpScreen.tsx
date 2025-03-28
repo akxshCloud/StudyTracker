@@ -113,98 +113,42 @@ export const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
   };
 
   const handleSignUp = async () => {
-    // Reset all error states
-    setEmailError(false);
-    setPasswordError(false);
-    setConfirmPasswordError(false);
-    setEmailErrorMessage('');
-    setPasswordErrorMessage('');
-    setConfirmPasswordErrorMessage('');
-
-    let hasError = false;
-
-    // Validate email
-    if (!email) {
-      setEmailError(true);
-      setEmailErrorMessage('Email is required');
-      shakeAnimation(emailShakeAnim);
-      hasError = true;
-    } else if (!validateEmail(email)) {
-      setEmailError(true);
-      setEmailErrorMessage('Please enter a valid email address');
-      shakeAnimation(emailShakeAnim);
-      hasError = true;
+    if (!email || !password || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
     }
 
-    // Validate password
-    if (!password) {
-      setPasswordError(true);
-      setPasswordErrorMessage('Password is required');
-      shakeAnimation(passwordShakeAnim);
-      hasError = true;
-    } else if (!validatePassword(password)) {
-      setPasswordError(true);
-      setPasswordErrorMessage('Password must be at least 6 characters');
-      shakeAnimation(passwordShakeAnim);
-      hasError = true;
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
     }
 
-    // Validate confirm password
-    if (!confirmPassword) {
-      setConfirmPasswordError(true);
-      setConfirmPasswordErrorMessage('Please confirm your password');
-      shakeAnimation(confirmPasswordShakeAnim);
-      hasError = true;
-    } else if (password !== confirmPassword) {
-      setConfirmPasswordError(true);
-      setConfirmPasswordErrorMessage('Passwords do not match');
-      shakeAnimation(confirmPasswordShakeAnim);
-      hasError = true;
-    }
-
-    if (hasError) return;
+    setLoading(true);
 
     try {
-      setLoading(true);
-      
-      // Sign up the user
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
       });
 
-      if (signUpError) {
-        if (signUpError.message.toLowerCase().includes('email')) {
-          setEmailError(true);
-          setEmailErrorMessage(signUpError.message);
-          shakeAnimation(emailShakeAnim);
-        } else if (signUpError.message.toLowerCase().includes('password')) {
-          setPasswordError(true);
-          setPasswordErrorMessage(signUpError.message);
-          shakeAnimation(passwordShakeAnim);
-        } else {
-          setEmailError(true);
-          setEmailErrorMessage(signUpError.message);
-          shakeAnimation(emailShakeAnim);
-        }
-        throw signUpError;
+      if (error) {
+        Alert.alert('Error', error.message);
+        return;
       }
 
-      // Show success message and direct user to verify email
       Alert.alert(
-        'Verification Required',
-        'Please check your email for a verification link. Once verified, you can log in to complete your profile.',
+        'Success',
+        'Please check your email for verification. After verifying, you will be asked to create your profile.',
         [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('Login')
-          }
+            onPress: () => navigation.navigate('Login'),
+          },
         ]
       );
-
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      Alert.alert('Error', error.message || 'Failed to create account');
+    } catch (error) {
+      console.error('Error in handleSignUp:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }

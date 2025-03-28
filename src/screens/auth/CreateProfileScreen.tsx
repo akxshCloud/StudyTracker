@@ -117,18 +117,19 @@ export const CreateProfileScreen: React.FC<CreateProfileScreenProps> = ({ naviga
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1,
+        quality: 0.8,
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets[0]) {
+        setUploadingImage(true);
         await uploadImage(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
   };
 
@@ -139,30 +140,25 @@ export const CreateProfileScreen: React.FC<CreateProfileScreenProps> = ({ naviga
     }
 
     try {
-      setUploadingImage(true);
-
       // Compress and resize image
       const manipulatedImage = await ImageManipulator.manipulateAsync(
         uri,
         [{ resize: { width: 400, height: 400 } }],
-        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
       );
 
-      // Upload to Supabase Storage with user ID as folder name
-      const filePath = `${userData.id}/avatar-${Date.now()}.jpg`;
-      
-      // Convert base64 to Uint8Array
-      const base64Data = manipulatedImage.base64 || '';
-      const byteString = atob(base64Data);
-      const byteNumbers = new Array(byteString.length);
-      for (let i = 0; i < byteString.length; i++) {
-        byteNumbers[i] = byteString.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
+      // Create a file name with user ID and timestamp
+      const fileName = `${userData.id}-${Date.now()}.jpg`;
+      const filePath = `${userData.id}/${fileName}`;
 
+      // Convert image to blob
+      const response = await fetch(manipulatedImage.uri);
+      const blob = await response.blob();
+
+      // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, byteArray, {
+        .upload(filePath, blob, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
           upsert: true
@@ -176,56 +172,55 @@ export const CreateProfileScreen: React.FC<CreateProfileScreenProps> = ({ naviga
         .getPublicUrl(filePath);
 
       setAvatarUrl(publicUrl);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading image:', error);
-      Alert.alert('Error', 'Failed to upload image');
+      Alert.alert('Error', error.message || 'Failed to upload image. Please try again.');
     } finally {
       setUploadingImage(false);
     }
   };
 
   const handleCreateProfile = async () => {
-    if (!userData?.id) {
-      Alert.alert('Error', 'Unable to create profile. Please try again.');
+    if (!userData) {
+      Alert.alert('Error', 'Unable to get user data. Please try signing in again.');
       return;
     }
-
+    
     if (!fullName.trim()) {
       setFullNameError(true);
       return;
     }
-
+    
+    setLoading(true);
     try {
-      setLoading(true);
-      console.log('Creating profile for user:', userData.id);
-      
-      const { error } = await supabase
+      // Create profile data object
+      const profileData = {
+        id: userData.id,
+        full_name: fullName.trim(),
+        bio: bio.trim() || null,
+        avatar_url: avatarUrl || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Insert profile data
+      const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({
-          id: userData.id,
-          full_name: fullName.trim(),
-          bio: bio.trim(),
-          avatar_url: avatarUrl,
-        });
+        .upsert(profileData);
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
+      if (profileError) throw profileError;
 
-      console.log('Profile created successfully');
-      
-      // Navigate to App screen in root navigator
-      const rootNavigation = navigation.getParent()?.getParent();
-      if (rootNavigation) {
-        rootNavigation.navigate('App');
-      } else {
-        // Fallback: refresh the session to trigger the auth state change
-        await supabase.auth.refreshSession();
-      }
-    } catch (error) {
+      // Refresh auth session to trigger profile check
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) throw refreshError;
+
+      // Navigate to login screen which will then redirect to the app
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    } catch (error: any) {
       console.error('Error creating profile:', error);
-      Alert.alert('Error', 'Failed to create profile');
+      Alert.alert('Error', error.message || 'Failed to create profile. Please try again.');
     } finally {
       setLoading(false);
     }

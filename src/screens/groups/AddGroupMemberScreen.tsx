@@ -58,13 +58,27 @@ export const AddGroupMemberScreen: React.FC = () => {
       }
 
       const authUser = authData[0];
+      console.log('Found auth user:', authUser);
 
-      // Then get their profile data
+      // Get the profile data with detailed error logging
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, avatar_url')
+        .select('*')
         .eq('id', authUser.id)
-        .maybeSingle();
+        .single();
+
+      // Log the complete response for debugging
+      console.log('Profile query response:', { profileData, profileError });
+
+      if (profileError) {
+        if (profileError.code === 'PGRST116') {
+          console.log('No profile found for user');
+        } else if (profileError.code === 'PGRST201') {
+          console.log('Insufficient permissions to access profile');
+        } else {
+          console.error('Error fetching profile:', profileError);
+        }
+      }
 
       // Check if user is already a member of the group
       const { data: existingMember, error: memberError } = await supabase
@@ -81,16 +95,20 @@ export const AddGroupMemberScreen: React.FC = () => {
         return;
       }
 
-      // Set user data even if profile is incomplete
-      setSearchedUser({
+      // Set user data combining auth and profile information
+      const userData = {
         id: authUser.id,
         email: authUser.email,
         full_name: profileData?.full_name || null,
         avatar_url: profileData?.avatar_url || null
-      });
+      };
+
+      console.log('Setting searched user data:', userData);
+      setSearchedUser(userData);
+      
     } catch (error: any) {
       console.error('Search error:', error);
-      setErrorMessage('User not found. Please check the email address and try again.');
+      setErrorMessage(error.message || 'User not found. Please check the email address and try again.');
       setShowErrorModal(true);
     } finally {
       setLoading(false);
@@ -198,17 +216,17 @@ export const AddGroupMemberScreen: React.FC = () => {
               placeholder="Enter email address"
               keyboardType="email-address"
               autoCapitalize="none"
-              className="flex-1 border border-gray-200 rounded-xl px-4 h-12 text-gray-800 bg-gray-50"
+              className="flex-1 bg-gray-50 rounded-lg px-4 py-2 text-gray-800"
             />
             <TouchableOpacity
               onPress={searchUser}
               disabled={loading}
-              className="w-12 h-12 bg-[#4B6BFB] rounded-xl items-center justify-center"
+              className="bg-[#4B6BFB] rounded-lg px-6 py-2 items-center justify-center"
             >
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Ionicons name="search" size={24} color="white" />
+                <Text className="text-white font-medium">Search</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -216,18 +234,18 @@ export const AddGroupMemberScreen: React.FC = () => {
 
         {searchedUser && (
           <View className="bg-white rounded-xl shadow-sm p-6">
-            <Text className="text-gray-500 text-sm mb-4">Found User</Text>
+            <Text className="text-lg font-semibold mb-4">Found User</Text>
             <View className="flex-row items-center justify-between">
               <View>
-                <Text className="text-lg font-semibold text-gray-800">
-                  {searchedUser.full_name || 'No Name'}
+                <Text className="text-lg font-medium text-gray-800">
+                  {searchedUser.full_name || searchedUser.email.split('@')[0]}
                 </Text>
                 <Text className="text-gray-500">{searchedUser.email}</Text>
               </View>
               <TouchableOpacity
                 onPress={addMember}
                 disabled={loading}
-                className="bg-[#4B6BFB] py-2 px-6 rounded-xl"
+                className="bg-[#4B6BFB] rounded-lg px-6 py-2"
               >
                 {loading ? (
                   <ActivityIndicator color="white" />

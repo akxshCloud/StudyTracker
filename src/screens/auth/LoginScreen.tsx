@@ -94,76 +94,52 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   };
 
   const handleLogin = async () => {
-    // Reset error states
-    setEmailError(false);
-    setPasswordError(false);
-    setEmailErrorMessage('');
-    setPasswordErrorMessage('');
-
-    let hasError = false;
-
-    if (!email) {
-      setEmailError(true);
-      setEmailErrorMessage('Email is required');
-      shakeAnimation(emailShakeAnim);
-      hasError = true;
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
     }
 
-    if (!password) {
-      setPasswordError(true);
-      setPasswordErrorMessage('Password is required');
-      shakeAnimation(passwordShakeAnim);
-      hasError = true;
-    }
-
-    if (hasError) return;
+    setLoading(true);
 
     try {
-      setLoading(true);
-
-      // Attempt to sign in
-      const { error: signInError, data: { user } } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (signInError) throw signInError;
-
-      if (!user) throw new Error('No user data returned');
-
-      // Check if user has a profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') { // PGRST116 is "not found" error
-        throw profileError;
-      }
-
-      // If no profile exists, navigate to create profile
-      if (!profile) {
-        navigation.navigate('CreateProfile');
+      if (signInError) {
+        Alert.alert('Error', signInError.message);
         return;
       }
 
-      // If profile exists, navigate to main app
-      navigation.getParent()?.navigate('Loading');
-
-    } catch (error: any) {
-      console.error('Login error:', error);
-      if (error.message.toLowerCase().includes('email')) {
-        setEmailError(true);
-        setEmailErrorMessage(error.message);
-        shakeAnimation(emailShakeAnim);
-      } else if (error.message.toLowerCase().includes('password')) {
-        setPasswordError(true);
-        setPasswordErrorMessage(error.message);
-        shakeAnimation(passwordShakeAnim);
-      } else {
-        Alert.alert('Error', error.message);
+      // Get the current session to access user ID
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Error getting session:', sessionError);
+        return;
       }
+
+      if (session?.user) {
+        // Check if user has a profile
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Error checking profile:', profileError);
+        }
+
+        // If no profile exists, navigate to create profile
+        if (!profile) {
+          navigation.navigate('CreateProfile');
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleLogin:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }

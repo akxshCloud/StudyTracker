@@ -51,12 +51,26 @@ interface StudyGroupWithMembers extends Group {
   tasks: any[];
 }
 
-interface GroupMemberWithEmail {
+interface GroupMemberWithProfile {
   user_id: string;
   role: string;
-  full_name: string | null;
-  email: string;
-  avatar_url: string | null;
+  auth_users_view: {
+    id: string;
+    email: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  } | null;
+}
+
+interface TransformedMember {
+  user_id: string;
+  role: string;
+  user: {
+    id: string;
+    full_name: string | null;
+    email: string;
+    avatar_url: string | null;
+  };
 }
 
 export const StudyGroupScreen: React.FC = () => {
@@ -67,95 +81,51 @@ export const StudyGroupScreen: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [sessions, setSessions] = useState<StudySession[]>([]);
 
-  // Add useFocusEffect to refresh data when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      if (route.params.groupId) {
-        console.log('Screen focused, refreshing data...');
-        refreshData();
-      }
-    }, [route.params.groupId])
+      refreshData();
+      
+      // Set up realtime subscriptions
+      const studySessionSubscription = supabase
+        .channel('study-sessions')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'study_sessions' }, (payload) => {
+          refreshData();
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            refreshData();
+          }
+        });
+
+      const taskSubscription = supabase
+        .channel('tasks')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
+          refreshData();
+        })
+        .subscribe();
+
+      const memberSubscription = supabase
+        .channel('group_members')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, (payload) => {
+          refreshData();
+        })
+        .subscribe();
+
+      return () => {
+        studySessionSubscription.unsubscribe();
+        taskSubscription.unsubscribe();
+        memberSubscription.unsubscribe();
+      };
+    }, [])
   );
 
-  useEffect(() => {
-    const startTime = Date.now();
-    const minimumLoadingTime = 3000;
-
-    Promise.all([
-      fetchGroupDetails(),
-      fetchGroupSessions()
-    ]).then(() => {
-      const elapsedTime = Date.now() - startTime;
-      const remainingTime = Math.max(0, minimumLoadingTime - elapsedTime);
-      setTimeout(() => setLoading(false), remainingTime);
-    });
-
-    // Set up realtime subscriptions
-    console.log('Setting up realtime subscriptions for group:', route.params.groupId);
-
-    const channel = supabase.channel('group_changes')
-      // Subscribe to study sessions changes
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'study_sessions',
-          filter: `group_id=eq.${route.params.groupId}`
-        },
-        (payload) => {
-          console.log('Study session change detected:', payload);
-          refreshData();
-        }
-      )
-      // Subscribe to tasks changes
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'group_tasks',
-          filter: `group_id=eq.${route.params.groupId}`
-        },
-        (payload) => {
-          console.log('Task change detected:', payload);
-          refreshData();
-        }
-      )
-      // Subscribe to member changes
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'group_members',
-          filter: `group_id=eq.${route.params.groupId}`
-        },
-        (payload) => {
-          console.log('Member change detected:', payload);
-          refreshData();
-        }
-      );
-
-    // Subscribe to the channel
-    channel.subscribe((status) => {
-      console.log('Subscription status:', status);
-    });
-
-    return () => {
-      console.log('Cleaning up subscriptions');
-      channel.unsubscribe();
-    };
-  }, [route.params.groupId]);
-
   const refreshData = async () => {
-    console.log('Refreshing group data...');
     setLoading(true);
-    
     try {
       await Promise.all([
         fetchGroupDetails(),
-        fetchGroupSessions()
+        fetchGroupSessions(),
+        fetchGroupMembers(route.params.groupId),
       ]);
     } catch (error) {
       console.error('Error refreshing data:', error);
@@ -192,7 +162,7 @@ export const StudyGroupScreen: React.FC = () => {
       // Finally fetch the tasks
       const { data: tasks, error: tasksError } = await supabase
         .from('group_tasks')
-        .select('*')
+        .select('id, title, description, status, due_date, created_at, group_id, assigned_to')
         .eq('group_id', route.params.groupId.toString());
 
       if (tasksError) throw tasksError;
@@ -231,9 +201,9 @@ export const StudyGroupScreen: React.FC = () => {
     }
   };
 
-  const fetchGroupMembers = async (groupId: string) => {
+  const fetchGroupMembers = async (groupId: string): Promise<TransformedMember[]> => {
     try {
-      // Get members with their profiles and emails
+      // First get the group members
       const { data: membersData, error: membersError } = await supabase
         .from('group_members')
         .select('user_id, role')
@@ -248,44 +218,56 @@ export const StudyGroupScreen: React.FC = () => {
         return [];
       }
 
-      const userIds = membersData.map(member => member.user_id);
+      // Get auth data (email) from auth_users_view
+      const memberUserIds = membersData.map(member => member.user_id);
+      const { data: authData, error: authError } = await supabase
+        .from('auth_users_view')
+        .select('id, email')
+        .in('id', memberUserIds);
 
-      // Get profiles and emails in parallel
-      const [profilesResponse, emailsResponse] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url')
-          .in('id', userIds),
-        supabase
-          .from('auth_users_view')
-          .select('id, email')
-          .in('id', userIds)
-      ]);
+      if (authError) {
+        console.error('Error fetching auth data:', authError);
+        return [];
+      }
+
+      // Get profile data (full_name, avatar_url) from profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', memberUserIds);
+
+      if (profileError) {
+        console.error('Error fetching profile data:', profileError);
+        return [];
+      }
 
       // Create maps for quick lookups
-      const profilesMap = (profilesResponse.data || []).reduce((acc, profile) => {
+      const authDataMap = (authData || []).reduce((acc, auth) => {
+        acc[auth.id] = auth;
+        return acc;
+      }, {} as Record<string, any>);
+
+      const profileDataMap = (profileData || []).reduce((acc, profile) => {
         acc[profile.id] = profile;
         return acc;
       }, {} as Record<string, any>);
 
-      const emailsMap = (emailsResponse.data || []).reduce((acc, user) => {
-        acc[user.id] = user.email;
-        return acc;
-      }, {} as Record<string, any>);
-
       // Transform the data
-      const transformedMembers = membersData.map(member => ({
-        user_id: member.user_id,
-        role: member.role,
-        user: {
-          id: member.user_id,
-          full_name: profilesMap[member.user_id]?.full_name || null,
-          email: emailsMap[member.user_id] || '',
-          avatar_url: profilesMap[member.user_id]?.avatar_url || null
-        }
-      }));
+      const transformedMembers = membersData.map(member => {
+        const auth = authDataMap[member.user_id] || {};
+        const profile = profileDataMap[member.user_id] || {};
+        return {
+          user_id: member.user_id,
+          role: member.role,
+          user: {
+            id: member.user_id,
+            full_name: profile.full_name || null,
+            email: auth.email || '',
+            avatar_url: profile.avatar_url || null
+          }
+        };
+      });
 
-      console.log('Transformed members:', JSON.stringify(transformedMembers, null, 2));
       return transformedMembers;
     } catch (error) {
       console.error('Error in fetchGroupMembers:', error);
@@ -492,10 +474,8 @@ export const StudyGroupScreen: React.FC = () => {
                   key={task.id}
                   className="bg-white rounded-xl p-4 shadow-sm mb-3"
                   onPress={() => {
-                    const taskId = parseInt(task.id);
-                    if (!isNaN(taskId)) {
-                      navigation.navigate('TaskDetails', { taskId });
-                    }
+                    console.log('Task clicked:', task);  // Debug log
+                    navigation.navigate('TaskDetails', { taskId: task.id });
                   }}
                 >
                   <Text className="text-lg font-semibold text-gray-800 mb-1">{task.title}</Text>
@@ -530,10 +510,11 @@ export const StudyGroupScreen: React.FC = () => {
               <View key={member.user_id} className="bg-white rounded-xl p-4 shadow-sm mb-3">
                 <View className="flex-row justify-between items-center">
                   <Text className="text-lg font-semibold text-gray-800">
-                    {member.user.full_name || member.user.email}
+                    {member.user.full_name || member.user.email.split('@')[0]}
                   </Text>
                   <Text className="text-[#4B6BFB] capitalize">{member.role}</Text>
                 </View>
+                <Text className="text-gray-500 text-sm">{member.user.email}</Text>
               </View>
             ))}
           </View>

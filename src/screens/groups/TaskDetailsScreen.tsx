@@ -49,6 +49,7 @@ export const TaskDetailsScreen: React.FC = () => {
 
   const fetchTaskDetails = async () => {
     try {
+      console.log('Fetching task details for ID:', route.params.taskId); // Debug log
       // First fetch the task data
       const { data: taskData, error: taskError } = await supabase
         .from('group_tasks')
@@ -56,8 +57,13 @@ export const TaskDetailsScreen: React.FC = () => {
         .eq('id', route.params.taskId)
         .single();
 
-      if (taskError) throw taskError;
+      if (taskError) {
+        console.error('Task fetch error:', taskError); // Debug log
+        throw taskError;
+      }
       if (!taskData) throw new Error('Task not found');
+
+      console.log('Found task data:', taskData); // Debug log
 
       // Map old 'pending' status to 'in_progress' if needed
       const status = taskData.status === 'pending' ? 'in_progress' : taskData.status as TaskStatus;

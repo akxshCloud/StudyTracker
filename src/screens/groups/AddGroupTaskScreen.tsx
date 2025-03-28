@@ -16,11 +16,21 @@ import { RootStackParamList } from '../../navigation/AppNavigator';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { GroupMember } from '../../types/studyGroup';
 
 type AddGroupTaskScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddGroupTask'>;
 type AddGroupTaskScreenRouteProp = RouteProp<RootStackParamList, 'AddGroupTask'>;
 type DateOption = 'today' | 'tomorrow' | 'next_week' | 'custom';
+
+interface GroupMember {
+  user_id: string;
+  role: string;
+  group_id: string;
+  user: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  };
+}
 
 export const AddGroupTaskScreen: React.FC = () => {
   const navigation = useNavigation<AddGroupTaskScreenNavigationProp>();
@@ -33,59 +43,53 @@ export const AddGroupTaskScreen: React.FC = () => {
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<{ label: string; value: string }[]>([]);
 
   useEffect(() => {
     fetchGroupMembers();
   }, [route.params.groupId]);
 
   const fetchGroupMembers = async () => {
-    try {
-      if (!route.params.groupId) {
-        console.log('No group ID provided');
-        setMembers([]);
-        return;
-      }
+    if (!route.params.groupId) return;
 
-      // First get all group members
+    try {
+      // Get group members
       const { data: membersData, error: membersError } = await supabase
         .from('group_members')
-        .select('*')
+        .select('user_id, role')
         .eq('group_id', route.params.groupId);
 
-      if (membersError) {
-        console.log('Error fetching members:', membersError.message);
-        setMembers([]);
-        return;
-      }
+      if (membersError) throw membersError;
+      if (!membersData || membersData.length === 0) return;
 
-      if (!membersData || membersData.length === 0) {
-        console.log('No members found for this group');
-        setMembers([]);
-        return;
-      }
-
-      // Then get their profiles
-      const memberIds = membersData.map(member => member.user_id);
-      const { data: profilesData, error: profilesError } = await supabase
+      // Get member profiles for assignee options
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url')
-        .in('id', memberIds);
+        .in('id', membersData.map(member => member.user_id));
 
       if (profilesError) {
-        console.log('Error fetching profiles:', profilesError.message);
-        setMembers([]);
+        console.error('Error fetching profiles:', profilesError);
         return;
       }
 
-      // Transform the data
-      const transformedMembers: GroupMember[] = membersData.map(member => {
-        const profile = profilesData?.find(p => p.id === member.user_id);
+      if (!profiles) return;
+
+      // Set up assignee options
+      const memberOptions = profiles.map(profile => ({
+        label: profile.full_name || 'Unnamed User',
+        value: profile.id,
+      }));
+
+      setAssigneeOptions(memberOptions);
+
+      // Transform the data for members list
+      const transformedMembers = membersData.map(member => {
+        const profile = profiles.find(p => p.id === member.user_id);
         return {
-          id: member.id,
-          group_id: route.params.groupId,
           user_id: member.user_id,
           role: member.role,
-          joined_at: member.joined_at || new Date().toISOString(),
+          group_id: route.params.groupId,
           user: {
             id: member.user_id,
             full_name: profile?.full_name || 'Unknown User',
@@ -94,10 +98,10 @@ export const AddGroupTaskScreen: React.FC = () => {
         };
       });
 
-        setMembers(transformedMembers);
+      setMembers(transformedMembers);
     } catch (error) {
-      console.log('Error in fetchGroupMembers:', error);
-      setMembers([]);
+      console.error('Error in fetchGroupMembers:', error);
+      Alert.alert('Error', 'Failed to fetch group members');
     }
   };
 
@@ -487,7 +491,7 @@ export const AddGroupTaskScreen: React.FC = () => {
                 >
                   {members.map((member) => (
                     <TouchableOpacity
-                      key={member.id}
+                      key={member.user_id}
                       onPress={() => setAssignedTo(assignedTo === member.user_id ? null : member.user_id)}
                       className={`px-4 py-2 rounded-full border ${
                         assignedTo === member.user_id

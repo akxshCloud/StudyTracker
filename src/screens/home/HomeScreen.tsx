@@ -101,6 +101,18 @@ const StatsCircle: React.FC<{
   </View>
 );
 
+interface MemberWithProfile {
+  user_id: string;
+  role: string;
+  group_id: string;
+  auth_users_view: {
+    id: string;
+    email: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  } | null;
+}
+
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const [showMenu, setShowMenu] = useState(false);
@@ -115,60 +127,43 @@ export const HomeScreen: React.FC = () => {
   const [studyGroups, setStudyGroups] = useState<StudyGroup[]>([]);
 
   useEffect(() => {
-    const getUserData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      
-      setUserData(user);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserData(session?.user ? session.user : null);
+      if (session?.user) {
+        fetchProfileData(session.user.id);
+      } else {
+        setUserData(null);
+        setProfileData(null);
+      }
+    });
 
-      // Fetch profile data including avatar_url
-      const { data: profileData } = await supabase
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProfileData = async (userId: string) => {
+    try {
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, avatar_url, bio, created_at, updated_at')
-        .eq('id', user.id)
+        .select('*')
+        .eq('id', userId)
         .single();
 
-      if (profileData) {
-        setUserData({ ...user, ...profileData });
-        setProfileData({
-          id: user.id,
-          full_name: profileData.full_name,
-          avatar_url: profileData.avatar_url,
-          bio: profileData.bio
-        });
-      }
-    };
-    getUserData();
-  }, []);
+      if (profileError) throw profileError;
+      if (profileData) setProfileData(profileData);
+    } catch (error) {
+      console.error('Error in fetchProfileData:', error);
+    }
+  };
 
   useFocusEffect(
     React.useCallback(() => {
       if (userData?.id) {
-        // Fetch profile data including avatar_url
-        const fetchProfileData = async () => {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('full_name, avatar_url, bio, created_at, updated_at')
-            .eq('id', userData.id)
-            .single();
-
-          if (profileData) {
-            setProfileData({
-              id: userData.id,
-              full_name: profileData.full_name,
-              avatar_url: profileData.avatar_url,
-              bio: profileData.bio
-            });
-          }
-        };
-
-        fetchProfileData();
+        fetchProfileData(userData.id);
         fetchSessions();
         fetchStudyGroups();
       }
-      // Adding an empty cleanup function to satisfy the useCallback hook
       return () => {};
-    }, [userData]) // Only depend on userData to prevent unnecessary refreshes
+    }, [userData])
   );
 
   const getCurrentDate = () => {
@@ -295,11 +290,12 @@ export const HomeScreen: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      // Navigate back to loading screen
-      navigation.getParent()?.navigate('Loading');
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Error signing out:', error.message);
+      }
     } catch (error) {
-      console.error('Error logging out:', error);
+      console.error('Error in handleLogout:', error);
     }
   };
 
@@ -310,32 +306,21 @@ export const HomeScreen: React.FC = () => {
 
   const fetchStudyGroups = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('No user found');
-        return;
-      }
-
-      // 1. First get the group IDs where the user is a member
-      const { data: memberGroups, error: memberError } = await supabase
+      const { data: memberData, error: memberError } = await supabase
         .from('group_members')
         .select('group_id')
-        .eq('user_id', user.id);
+        .eq('user_id', userData?.id);
 
       if (memberError) {
         console.error('Error fetching member groups:', memberError);
         return;
       }
 
-      if (!memberGroups || memberGroups.length === 0) {
-        setStudyGroups([]);
-        return;
-      }
+      if (!memberData || memberData.length === 0) return;
 
-      const groupIds = memberGroups.map(mg => mg.group_id);
+      const groupIds = memberData.map(member => member.group_id);
 
-      // 2. Then get the study groups data for these IDs
-      const { data: groups, error: groupsError } = await supabase
+      const { data: groupsData, error: groupsError } = await supabase
         .from('study_groups')
         .select('*')
         .in('id', groupIds);
@@ -345,15 +330,10 @@ export const HomeScreen: React.FC = () => {
         return;
       }
 
-      if (!groups) {
-        setStudyGroups([]);
-        return;
-      }
-
       // 3. Get all members for these groups
       const { data: membersData, error: membersError } = await supabase
         .from('group_members')
-        .select('*')
+        .select('user_id, role, group_id')
         .in('group_id', groupIds);
 
       if (membersError) {
@@ -361,28 +341,39 @@ export const HomeScreen: React.FC = () => {
         return;
       }
 
-      // 4. Get profiles for all members
-      const memberUserIds = membersData?.map(member => member.user_id) || [];
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('id', memberUserIds);
-
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        return;
-      }
-
-      // 5. Get auth users data
-      const { data: authUsersData, error: authUsersError } = await supabase
+      // 4. Get auth data (email) from auth_users_view
+      const memberUserIds = [...new Set((membersData || []).map(m => m.user_id))];
+      const { data: authData, error: authError } = await supabase
         .from('auth_users_view')
-        .select('*')
+        .select('id, email')
         .in('id', memberUserIds);
 
-      if (authUsersError) {
-        console.error('Error fetching auth users:', authUsersError);
+      if (authError) {
+        console.error('Error fetching auth data:', authError);
         return;
       }
+
+      // 5. Get profile data (full_name, avatar_url) from profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', memberUserIds);
+
+      if (profileError) {
+        console.error('Error fetching profile data:', profileError);
+        return;
+      }
+
+      // Create maps for quick lookups
+      const authDataMap = (authData || []).reduce((acc, auth) => {
+        acc[auth.id] = auth;
+        return acc;
+      }, {} as Record<string, any>);
+
+      const profileDataMap = (profileData || []).reduce((acc, profile) => {
+        acc[profile.id] = profile;
+        return acc;
+      }, {} as Record<string, any>);
 
       // 6. Fetch all study sessions for these groups
       const { data: groupSessions, error: groupSessionsError } = await supabase
@@ -404,23 +395,22 @@ export const HomeScreen: React.FC = () => {
       }, {});
 
       // Combine all the data
-      const transformedGroups = groups.map(group => {
-        const groupMembers = membersData
-          ?.filter(member => member.group_id === group.id)
+      const transformedGroups = groupsData.map(group => {
+        const groupMembers = (membersData || [])
+          .filter(member => member.group_id === group.id)
           .map(member => {
-            const profile = profilesData?.find(p => p.id === member.user_id);
-            const authUser = authUsersData?.find(u => u.id === member.user_id);
-            
+            const auth = authDataMap[member.user_id] || {};
+            const profile = profileDataMap[member.user_id] || {};
             return {
               user_id: member.user_id,
               role: member.role,
               user: {
-                full_name: profile?.full_name || null,
-                avatar_url: profile?.avatar_url || null,
-                email: authUser?.email || null
+                full_name: profile.full_name || null,
+                avatar_url: profile.avatar_url || null,
+                email: auth.email || null
               }
             };
-          }) || [];
+          });
 
         return {
           id: group.id,
@@ -459,7 +449,7 @@ export const HomeScreen: React.FC = () => {
                   source={
                     profileData?.avatar_url
                       ? { uri: profileData.avatar_url }
-                      : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(profileData?.full_name || 'User')}&background=random&size=128` }
+                      : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(userData?.email?.split('@')[0] || 'User')}&background=random&size=128` }
                   }
                   className="w-10 h-10 rounded-full"
                   onError={() => {
@@ -477,7 +467,7 @@ export const HomeScreen: React.FC = () => {
             {/* Welcome Message */}
             <View className="mb-6">
               <Text className="text-3xl font-bold text-gray-800">
-                Hello {profileData?.full_name?.split(' ')[0] || 'there'}!
+                Hello {profileData?.full_name?.split(' ')[0] || userData?.email?.split('@')[0] || 'there'}!
               </Text>
             </View>
 

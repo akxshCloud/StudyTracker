@@ -22,7 +22,7 @@ export type RootStackParamList = {
   EditGroup: { groupId: string };
   AddGroupMember: { groupId: string };
   AddGroupTask: { groupId: string };
-  TaskDetails: { taskId: number };
+  TaskDetails: { taskId: string };
   SessionDetails: { sessionId: number };
 };
 
