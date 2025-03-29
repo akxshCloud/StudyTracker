@@ -66,6 +66,7 @@ const LoadingScreen = () => {
   };
 
   const handleStart = () => {
+    // Use replace instead of reset
     navigation.replace('Auth');
   };
 

@@ -30,8 +30,31 @@ export const GroupMessagesScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState<string>('');
+  const [userScrolled, setUserScrolled] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const messagesRef = useRef<GroupMessage[]>([]);
+
+  useEffect(() => {
+    const fetchGroupDetails = async () => {
+      try {
+        const { data: groupData, error } = await supabase
+          .from('study_groups')
+          .select('name')
+          .eq('id', route.params.groupId)
+          .single();
+
+        if (error) throw error;
+        if (groupData) {
+          setGroupName(groupData.name);
+        }
+      } catch (error) {
+        console.error('Error fetching group details:', error);
+      }
+    };
+
+    fetchGroupDetails();
+  }, [route.params.groupId]);
 
   // Keep messagesRef in sync with messages state
   useEffect(() => {
@@ -111,21 +134,20 @@ export const GroupMessagesScreen: React.FC = () => {
                 // Update messages state
                 setMessages(prevMessages => [...prevMessages, messageWithSender]);
                   
-                // Scroll to bottom on new message
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollToEnd({ animated: true });
-                }, 100);
+                // Only scroll to bottom for new messages if:
+                // 1. The message is from the current user, or
+                // 2. The user hasn't scrolled up and is near the bottom
+                if (newMessage.sender_id === currentUserId || !userScrolled) {
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 100);
+                }
               } catch (error) {
                 console.error('Error handling real-time message:', error);
               }
             }
           )
-          .subscribe((status: 'SUBSCRIBED' | 'CLOSED' | 'TIMED_OUT' | 'CHANNEL_ERROR') => {
-            console.log('Subscription status:', status);
-            if (status === 'SUBSCRIBED') {
-              console.log('Successfully subscribed to real-time updates');
-            }
-          });
+          .subscribe();
       } catch (error) {
         console.error('Error in setup:', error);
       }
@@ -135,7 +157,6 @@ export const GroupMessagesScreen: React.FC = () => {
 
     return () => {
       if (channel) {
-        console.log('Unsubscribing from channel...');
         channel.unsubscribe();
       }
     };
@@ -149,14 +170,12 @@ export const GroupMessagesScreen: React.FC = () => {
       setSending(true);
       setNewMessage(''); // Clear input immediately
 
-      // Get the current user's profile first
       const { data: senderProfile } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url')
         .eq('id', currentUserId)
         .single();
 
-      // Insert the message
       const { data: insertedMessage, error } = await supabase
         .from('group_messages')
         .insert({
@@ -170,7 +189,6 @@ export const GroupMessagesScreen: React.FC = () => {
       if (error) throw error;
 
       if (insertedMessage) {
-        // Immediately add the message to the UI
         const messageWithSender: GroupMessage = {
           ...insertedMessage,
           sender: senderProfile || undefined
@@ -178,34 +196,19 @@ export const GroupMessagesScreen: React.FC = () => {
         
         setMessages(prev => [...prev, messageWithSender]);
         
-        // Scroll to bottom
+        // Always scroll to bottom when sending a message
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
       }
-
-      // Refresh messages to ensure consistency
-      fetchMessages();
     } catch (error) {
       console.error('Error sending message:', error);
-      setNewMessage(messageToSend); // Restore the message if sending failed
+      setNewMessage(messageToSend);
     } finally {
       setSending(false);
     }
   };
 
-  // Add periodic refresh
-  useEffect(() => {
-    const refreshInterval = setInterval(() => {
-      if (!sending) {
-        fetchMessages();
-      }
-    }, 1000); // Refresh every 1 second
-
-    return () => clearInterval(refreshInterval);
-  }, [sending, route.params.groupId]);
-
-  // Modify fetchMessages to prevent unnecessary updates
   const fetchMessages = async () => {
     try {
       const { data: messagesData, error: messagesError } = await supabase
@@ -216,10 +219,7 @@ export const GroupMessagesScreen: React.FC = () => {
 
       if (messagesError) throw messagesError;
 
-      // If no new messages, don't proceed
-      if (!messagesData || messagesData.length === messages.length) {
-        return;
-      }
+      if (!messagesData) return;
 
       const senderIds = [...new Set(messagesData.map(m => m.sender_id))];
       const { data: profilesData, error: profilesError } = await supabase
@@ -234,16 +234,10 @@ export const GroupMessagesScreen: React.FC = () => {
         sender: profilesData?.find(profile => profile.id === message.sender_id)
       }));
 
-      // Only update if the messages are actually different
-      const currentIds = new Set(messages.map(m => m.id));
-      const newIds = new Set(messagesWithSenders.map(m => m.id));
-      const hasChanges = messagesWithSenders.length !== messages.length || 
-        [...newIds].some(id => !currentIds.has(id));
-
-      if (hasChanges) {
-        setMessages(messagesWithSenders);
-        
-        // Scroll to bottom for new messages
+      setMessages(messagesWithSenders);
+      
+      // Only scroll to bottom on initial load
+      if (!userScrolled && loading) {
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: false });
         }, 100);
@@ -268,14 +262,23 @@ export const GroupMessagesScreen: React.FC = () => {
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       {/* Header */}
-      <View className="px-3 py-1 flex-row items-center border-b border-gray-100">
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          className="mr-2"
-        >
-          <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
-        </TouchableOpacity>
-        <Text className="text-2xl font-semibold text-gray-800">Group Chat</Text>
+      <View 
+        style={{ 
+          height: Platform.OS === 'ios' ? 54 : 56,
+          paddingTop: Platform.OS === 'ios' ? 10 : 0,
+          backgroundColor: 'white'
+        }}
+        className="px-3 flex-row justify-between items-center"
+      >
+        <View className="flex-row items-center">
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            className="mr-3 p-2"
+          >
+            <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
+          </TouchableOpacity>
+          <Text className="text-2xl font-semibold text-gray-800">{groupName}</Text>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -299,6 +302,17 @@ export const GroupMessagesScreen: React.FC = () => {
                 }}
                 keyboardDismissMode="on-drag"
                 keyboardShouldPersistTaps="handled"
+                onScrollBeginDrag={() => setUserScrolled(true)}
+                onMomentumScrollEnd={(event) => {
+                  const offsetY = event.nativeEvent.contentOffset.y;
+                  const contentHeight = event.nativeEvent.contentSize.height;
+                  const scrollViewHeight = event.nativeEvent.layoutMeasurement.height;
+                  
+                  // If user has scrolled to bottom or near bottom (within 50px), allow auto-scrolling again
+                  if (contentHeight - offsetY - scrollViewHeight < 50) {
+                    setUserScrolled(false);
+                  }
+                }}
               >
                 {messages.map((message, index) => (
                   <View

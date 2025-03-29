@@ -117,6 +117,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       
       if (sessionError) {
         console.error('Error getting session:', sessionError);
+        Alert.alert('Error', 'Failed to get session after login');
         return;
       }
 
@@ -130,11 +131,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
         if (profileError && profileError.code !== 'PGRST116') {
           console.error('Error checking profile:', profileError);
+          Alert.alert('Error', 'Failed to check user profile');
+          return;
         }
 
         // If no profile exists, navigate to create profile
         if (!profile) {
-          navigation.navigate('CreateProfile');
+          navigation.replace('CreateProfile');
+        } else {
+          // If profile exists, navigate to App stack
+          const rootNavigation = navigation.getParent();
+          if (rootNavigation) {
+            rootNavigation.reset({
+              index: 0,
+              routes: [{ name: 'App' }],
+            });
+          }
         }
       }
     } catch (error) {

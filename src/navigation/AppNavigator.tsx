@@ -8,7 +8,6 @@ import { CreateGroupScreen } from '../screens/groups/CreateGroupScreen';
 import { AddGroupTaskScreen } from '../screens/groups/AddGroupTaskScreen';
 import { TaskDetailsScreen } from '../screens/groups/TaskDetailsScreen';
 import { SessionDetailsScreen } from '../screens/sessions/SessionDetailsScreen';
-import { AddGroupMemberScreen } from '../screens/groups/AddGroupMemberScreen';
 import { EditGroupScreen } from '../screens/groups/EditGroupScreen';
 import { GroupMessagesScreen } from '../screens/groups/GroupMessagesScreen';
 
@@ -21,7 +20,6 @@ export type RootStackParamList = {
   StudyGroup: { groupId: string };
   CreateGroup: undefined;
   EditGroup: { groupId: string };
-  AddGroupMember: { groupId: string };
   AddGroupTask: { groupId: string };
   TaskDetails: { taskId: string };
   SessionDetails: { sessionId: number };
@@ -47,11 +45,6 @@ export const AppNavigator: React.FC = () => {
       <Stack.Screen name="AddGroupTask" component={AddGroupTaskScreen} />
       <Stack.Screen name="TaskDetails" component={TaskDetailsScreen} />
       <Stack.Screen name="SessionDetails" component={SessionDetailsScreen} />
-      <Stack.Screen
-        name="AddGroupMember"
-        component={AddGroupMemberScreen}
-        options={{ headerShown: false }}
-      />
       <Stack.Screen name="GroupMessages" component={GroupMessagesScreen} />
     </Stack.Navigator>
   );

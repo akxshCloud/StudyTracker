@@ -32,22 +32,24 @@ export const RootNavigator = () => {
       }
       
       setHasProfile(!!data);
+      return !!data;
     } catch (error) {
       console.error('Error in checkProfile:', error);
       setHasProfile(false);
+      return false;
     }
   };
 
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession()
-      .then(({ data: { session }, error }) => {
+      .then(async ({ data: { session }, error }) => {
         if (error) {
           console.error('Error getting session:', error);
         }
         setSession(session);
         if (session?.user) {
-          checkProfile(session.user.id);
+          await checkProfile(session.user.id);
         }
       })
       .catch((error) => {
@@ -58,12 +60,14 @@ export const RootNavigator = () => {
       });
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
       setSession(session);
-      if (session?.user) {
-        await checkProfile(session.user.id);
-      } else {
+      
+      if (event === 'SIGNED_OUT') {
         setHasProfile(null);
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        await checkProfile(session.user.id);
       }
     });
 
@@ -71,16 +75,22 @@ export const RootNavigator = () => {
   }, []);
 
   if (isLoading) {
-    return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Loading" component={LoadingScreen} />
-      </Stack.Navigator>
-    );
+    return null;
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {session && hasProfile ? (
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        animation: 'fade'
+      }}
+    >
+      {!session ? (
+        <>
+          <Stack.Screen name="Loading" component={LoadingScreen} />
+          <Stack.Screen name="Auth" component={AuthNavigator} />
+        </>
+      ) : hasProfile ? (
         <Stack.Screen name="App" component={AppNavigator} />
       ) : (
         <Stack.Screen name="Auth" component={AuthNavigator} />

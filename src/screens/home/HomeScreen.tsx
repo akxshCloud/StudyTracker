@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, CommonActions } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { StudyGroup } from '../../types/studyGroup';
@@ -75,31 +75,99 @@ const StatsCircle: React.FC<{
   label: string;
   value: string | number;
   color: string;
-}> = ({ label, value, color }) => (
-  <View className="items-center flex-1 mx-2">
-    <View 
-      className="items-center justify-center rounded-full w-[100px] h-[100px]"
-      style={{ backgroundColor: color }}
+  isSelected: boolean;
+  onPress: () => void;
+}> = ({ label, value, color, isSelected, onPress }) => {
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+  const shadowAnim = React.useRef(new Animated.Value(0)).current;
+  const timerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  React.useEffect(() => {
+    // Clear any existing timer when selection changes
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: isSelected ? 1.05 : 1,
+        useNativeDriver: true,
+        damping: 12,
+        mass: 0.8,
+      }),
+      Animated.spring(shadowAnim, {
+        toValue: isSelected ? 1 : 0,
+        useNativeDriver: true,
+        damping: 12,
+        mass: 0.8,
+      }),
+    ]).start();
+
+    // Set new timer if selected
+    if (isSelected) {
+      timerRef.current = setTimeout(() => {
+        onPress();
+      }, 3000);
+    }
+
+    // Cleanup timer on unmount or when selection changes
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [isSelected]);
+
+  return (
+    <TouchableOpacity 
+      onPress={onPress}
+      className="items-center flex-1"
+      style={{
+        zIndex: isSelected ? 10 : 1,
+        elevation: isSelected ? 10 : 1,
+      }}
     >
-      <Text 
-        className="text-2xl font-semibold text-gray-800 mb-1" 
-        numberOfLines={1} 
-        adjustsFontSizeToFit
+      <Animated.View 
+        className="items-center justify-center rounded-full w-[120px] h-[120px]"
+        style={{
+          backgroundColor: color,
+          transform: [{ scale: scaleAnim }],
+          shadowColor: '#000',
+          shadowOffset: {
+            width: 0,
+            height: 8,
+          },
+          shadowOpacity: shadowAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 0.15],
+          }),
+          shadowRadius: shadowAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 12],
+          }),
+        }}
       >
-        {value}
-      </Text>
-      <View className="px-3">
         <Text 
-          className="text-xs text-gray-600 text-center" 
-          numberOfLines={2} 
+          className="text-2xl font-semibold text-gray-800 mb-1" 
+          numberOfLines={1} 
           adjustsFontSizeToFit
         >
-          {label}
+          {value}
         </Text>
-      </View>
-    </View>
-  </View>
-);
+        <View className="px-3">
+          <Text 
+            className="text-xs text-gray-600 text-center" 
+            numberOfLines={2} 
+            adjustsFontSizeToFit
+          >
+            {label}
+          </Text>
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
 
 interface MemberWithProfile {
   user_id: string;
@@ -125,6 +193,7 @@ export const HomeScreen: React.FC = () => {
   const menuAnimation = new Animated.Value(0);
   const [profileData, setProfileData] = useState<UserProfile | null>(null);
   const [studyGroups, setStudyGroups] = useState<StudyGroup[]>([]);
+  const [selectedCircle, setSelectedCircle] = useState<number | null>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -290,12 +359,15 @@ export const HomeScreen: React.FC = () => {
 
   const handleLogout = async () => {
     try {
+      setShowMenu(false); // Close the menu first
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Error signing out:', error.message);
+        Alert.alert('Error', 'Failed to sign out. Please try again.');
       }
     } catch (error) {
       console.error('Error in handleLogout:', error);
+      Alert.alert('Error', 'An unexpected error occurred while signing out');
     }
   };
 
@@ -434,192 +506,199 @@ export const HomeScreen: React.FC = () => {
   };
 
   return (
-    <View className="flex-1">
-      <SafeAreaView className="flex-1 bg-white">
-        <ScrollView className="flex-1">
-          <View className="px-4 py-2">
-            {/* Header with Date and Avatar */}
+    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
+      {/* Header */}
+      <View className="px-3 py-4 flex-row items-center justify-between">
+        <Text className="text-2xl font-bold text-gray-800">Home</Text>
+        <TouchableOpacity 
+          onPress={() => setShowMenu(!showMenu)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Image
+            source={{ 
+              uri: profileData?.avatar_url || 
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(profileData?.full_name || 'User')}&background=random` 
+            }}
+            className="w-8 h-8 rounded-full"
+          />
+        </TouchableOpacity>
+      </View>
+
+      {/* Main Content */}
+      <ScrollView 
+        className="flex-1" 
+        contentContainerStyle={{ 
+          paddingHorizontal: 12,
+          paddingBottom: 20
+        }}
+      >
+        <View className="px-3 py-2">
+          {/* Welcome Message */}
+          <View className="mb-6">
+            <Text className="text-gray-500 mb-1">
+              {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.
+            </Text>
+            <Text className="text-3xl font-bold text-gray-800">
+              Hello {profileData?.full_name?.split(' ')[0] || userData?.email?.split('@')[0] || 'there'}!
+            </Text>
+          </View>
+
+          {/* Start Studying Button */}
+          <TouchableOpacity
+            onPress={() => navigation.navigate('AddSession')}
+            className="bg-black rounded-full py-4 mb-8"
+          >
+            <View className="flex-row justify-center items-center">
+              <Text className="text-white text-lg font-semibold mr-2">Start Studying</Text>
+              <Text className="text-white text-lg">→</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Stats Circles */}
+          <View className="flex-row justify-between px-1 mb-8" style={{ position: 'relative' }}>
+            <StatsCircle
+              label="Today's Study Time"
+              value={`${todayHours.toFixed(1)}hrs`}
+              color="#FFE8E8"
+              isSelected={selectedCircle === 0}
+              onPress={() => setSelectedCircle(selectedCircle === 0 ? null : 0)}
+            />
+            <StatsCircle
+              label="Weekly Study Time"
+              value={`${weeklyHours.toFixed(1)}hrs`}
+              color="#EBE8FF"
+              isSelected={selectedCircle === 1}
+              onPress={() => setSelectedCircle(selectedCircle === 1 ? null : 1)}
+            />
+            <StatsCircle
+              label="Most Time Spent on"
+              value={mostStudiedSubject || 'N/A'}
+              color="#E8F4FF"
+              isSelected={selectedCircle === 2}
+              onPress={() => setSelectedCircle(selectedCircle === 2 ? null : 2)}
+            />
+            <StatsCircle
+              label="Your Best Month"
+              value={bestMonth.month || 'N/A'}
+              color="#E8FFE8"
+              isSelected={selectedCircle === 3}
+              onPress={() => setSelectedCircle(selectedCircle === 3 ? null : 3)}
+            />
+          </View>
+
+          {/* Study Groups Section */}
+          <View className="mb-6">
             <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-gray-400 text-lg">{getCurrentDate()}</Text>
-              <TouchableOpacity 
-                onPress={() => setShowMenu(!showMenu)}
-                className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden"
-              >
-                <Image
-                  source={
-                    profileData?.avatar_url
-                      ? { uri: profileData.avatar_url }
-                      : { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(userData?.email?.split('@')[0] || 'User')}&background=random&size=128` }
-                  }
-                  className="w-10 h-10 rounded-full"
-                  onError={() => {
-                    if (profileData?.avatar_url) {
-                      setProfileData(prev => prev ? {
-                        ...prev,
-                        avatar_url: null
-                      } : null);
-                    }
-                  }}
-                />
+              <Text className="text-2xl font-bold text-gray-800">Study Groups</Text>
+              <TouchableOpacity onPress={handleCreateGroup}>
+                <Text className="text-[#4B6BFB] text-base">+ New</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Welcome Message */}
-            <View className="mb-6">
-              <Text className="text-3xl font-bold text-gray-800">
-                Hello {profileData?.full_name?.split(' ')[0] || userData?.email?.split('@')[0] || 'there'}!
+            
+            {studyGroups.length === 0 ? (
+              <Text className="text-gray-500 text-center py-4">
+                No study groups yet. Create your first one!
               </Text>
-            </View>
-
-            {/* Start Studying Button */}
-            <TouchableOpacity
-              onPress={() => navigation.navigate('AddSession')}
-              className="bg-black rounded-full py-4 mb-8"
-            >
-              <View className="flex-row justify-center items-center">
-                <Text className="text-white text-lg font-semibold mr-2">Start Studying</Text>
-                <Text className="text-white text-lg">→</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Stats Circles */}
-            <View className="flex-row justify-between px-2 mb-8">
-              <StatsCircle
-                label="Today's Study Time"
-                value={`${todayHours.toFixed(1)}hrs`}
-                color="#FFE5E5"
-              />
-              <StatsCircle
-                label="Weekly Study Time"
-                value={`${weeklyHours.toFixed(1)}hrs`}
-                color="#F8E4FF"
-              />
-              <StatsCircle
-                label="Most Time Spent on"
-                value={mostStudiedSubject || 'N/A'}
-                color="#E4F1FF"
-              />
-              <StatsCircle
-                label="Your Best Month"
-                value={bestMonth.month || 'N/A'}
-                color="#E4FFE4"
-              />
-            </View>
-
-            {/* Study Groups Section */}
-            <View className="mb-6">
-              <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-2xl font-bold text-gray-800">Study Groups</Text>
-                <TouchableOpacity onPress={handleCreateGroup}>
-                  <Text className="text-[#4B6BFB] text-base">+ New</Text>
-                </TouchableOpacity>
-              </View>
-              
-              {studyGroups.length === 0 ? (
-                <Text className="text-gray-500 text-center py-4">
-                  No study groups yet. Create your first one!
-                </Text>
-              ) : (
-                <View className="space-y-3 px-1">
-                  {[...studyGroups]
-                    .sort((a, b) => b.total_hours - a.total_hours)
-                    .map((group, index) => (
-                      <TouchableOpacity
-                        key={group.id}
-                        onPress={() => navigation.navigate('StudyGroup', { groupId: group.id })}
-                        className="bg-[#4B6BFB] rounded-[24px] p-4"
-                        style={{
-                          height: 180 // Fixed height for consistency
-                        }}
-                      >
-                        <Text className="text-white/70 text-sm">
-                          Created on {new Date(group.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                        </Text>
-                        <Text className="text-white text-3xl font-bold mt-2 mb-auto">{group.name}</Text>
-                        
-                        <View className="flex-row justify-between items-end">
-                          <View>
-                            <Text className="text-white/70 text-sm mb-1">Members</Text>
-                            <View className="flex-row">
-                              {group.group_members?.slice(0, 3).map((member, idx) => (
+            ) : (
+              <View className="space-y-3">
+                {[...studyGroups]
+                  .sort((a, b) => b.total_hours - a.total_hours)
+                  .map((group, index) => (
+                    <TouchableOpacity
+                      key={group.id}
+                      onPress={() => navigation.navigate('StudyGroup', { groupId: group.id })}
+                      className="bg-[#4B6BFB] rounded-[24px] p-4"
+                      style={{
+                        height: 180 // Fixed height for consistency
+                      }}
+                    >
+                      <Text className="text-white/70 text-sm">
+                        Created on {new Date(group.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </Text>
+                      <Text className="text-white text-3xl font-bold mt-2 mb-auto">{group.name}</Text>
+                      
+                      <View className="flex-row justify-between items-end">
+                        <View>
+                          <Text className="text-white/70 text-sm mb-1">Members</Text>
+                          <View className="flex-row">
+                            {group.group_members?.slice(0, 3).map((member, idx) => (
+                              <View
+                                key={member.user_id}
+                                style={{
+                                  width: 36,
+                                  height: 36,
+                                  marginLeft: idx === 0 ? 0 : -12,
+                                  zIndex: 3 - idx,
+                                  borderRadius: 18,
+                                  backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                                }}
+                              >
                                 <View
-                                  key={member.user_id}
                                   style={{
-                                    width: 36,
-                                    height: 36,
-                                    marginLeft: idx === 0 ? 0 : -12,
-                                    zIndex: 3 - idx,
-                                    borderRadius: 18,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: 16,
+                                    overflow: 'hidden',
+                                    margin: 2,
                                   }}
                                 >
-                                  <View
-                                    style={{
-                                      width: 32,
-                                      height: 32,
-                                      borderRadius: 16,
-                                      overflow: 'hidden',
-                                      margin: 2,
+                                  <Image
+                                    source={{
+                                      uri: member.user?.avatar_url ||
+                                        `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user?.full_name || 'User')}&background=random&size=128`
                                     }}
-                                  >
-                                    <Image
-                                      source={{
-                                        uri: member.user?.avatar_url ||
-                                          `https://ui-avatars.com/api/?name=${encodeURIComponent(member.user?.full_name || 'User')}&background=random&size=128`
-                                      }}
-                                      style={{
-                                        width: '100%',
-                                        height: '100%',
-                                      }}
-                                      resizeMode="cover"
-                                    />
-                                  </View>
-                                </View>
-                              ))}
-                              {(group.group_members?.length || 0) > 3 && (
-                                <View 
-                                  style={{
-                                    width: 36,
-                                    height: 36,
-                                    marginLeft: -12,
-                                    borderRadius: 18,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                                    padding: 2,
-                                  }}
-                                >
-                                  <View
                                     style={{
                                       width: '100%',
                                       height: '100%',
-                                      borderRadius: 16,
-                                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                                      justifyContent: 'center',
-                                      alignItems: 'center',
                                     }}
-                                  >
-                                    <Text className="text-xs text-white">+{(group.group_members?.length || 0) - 3}</Text>
-                                  </View>
+                                    resizeMode="cover"
+                                  />
                                 </View>
-                              )}
-                            </View>
-                          </View>
-                          <View>
-                            <Text className="text-white/70 text-sm mb-1">Total Hours</Text>
-                            <Text className="text-white font-semibold text-2xl">
-                              {group.total_hours.toFixed(1)} hrs
-                            </Text>
+                              </View>
+                            ))}
+                            {(group.group_members?.length || 0) > 3 && (
+                              <View 
+                                style={{
+                                  width: 36,
+                                  height: 36,
+                                  marginLeft: -12,
+                                  borderRadius: 18,
+                                  backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                                  padding: 2,
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    borderRadius: 16,
+                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  <Text className="text-xs text-white">+{(group.group_members?.length || 0) - 3}</Text>
+                                </View>
+                              </View>
+                            )}
                           </View>
                         </View>
-                      </TouchableOpacity>
-                    ))}
-                </View>
-              )}
-            </View>
+                        <View>
+                          <Text className="text-white/70 text-sm mb-1">Total Hours</Text>
+                          <Text className="text-white font-semibold text-2xl">
+                            {group.total_hours.toFixed(1)} hrs
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            )}
           </View>
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+      </ScrollView>
 
-      {/* Menu and Backdrop as portal-like overlay */}
+      {/* Menu Overlay */}
       {showMenu && (
         <View 
           style={{ 
@@ -629,6 +708,8 @@ export const HomeScreen: React.FC = () => {
             right: 0,
             bottom: 0,
             zIndex: 1000,
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
         >
           <TouchableOpacity 
@@ -638,7 +719,7 @@ export const HomeScreen: React.FC = () => {
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.5)',
+              backgroundColor: 'rgba(0,0,0,0.3)',
             }}
             activeOpacity={1}
             onPress={() => setShowMenu(false)}
@@ -646,36 +727,39 @@ export const HomeScreen: React.FC = () => {
           
           <View 
             style={{ 
-              position: 'absolute',
-              top: Platform.OS === 'ios' ? 105 : 80,
-              right: 20,
               backgroundColor: 'white',
-              borderRadius: 12,
+              borderRadius: 24,
               shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.15,
-              shadowRadius: 8,
-              elevation: 5,
-              width: 140,
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.12,
+              shadowRadius: 16,
+              elevation: 8,
+              width: '85%',
+              maxWidth: 320,
               overflow: 'hidden',
               zIndex: 1001,
             }}
           >
-            <TouchableOpacity 
-              className="px-4 py-3 border-b border-gray-100 active:bg-gray-50"
-              onPress={handleProfile}
-            >
-              <Text className="text-gray-800 font-medium">Profile</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              className="px-4 py-3 active:bg-gray-50"
-              onPress={handleLogout}
-            >
-              <Text className="text-red-500 font-medium">Logout</Text>
-            </TouchableOpacity>
+            <View className="py-2">
+              <Text className="text-center text-lg font-semibold text-gray-800 px-6 py-3 border-b border-gray-100">
+                Menu
+              </Text>
+              <TouchableOpacity 
+                className="px-6 py-4 flex-row items-center justify-center active:bg-gray-50"
+                onPress={handleProfile}
+              >
+                <Text className="text-gray-800 text-[17px] font-medium">Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                className="px-6 py-4 flex-row items-center justify-center active:bg-gray-50"
+                onPress={handleLogout}
+              >
+                <Text className="text-[#FF3B30] text-[17px] font-medium">Logout</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }; 

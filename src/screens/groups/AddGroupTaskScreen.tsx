@@ -431,18 +431,25 @@ export const AddGroupTaskScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-          {/* Header */}
-      <View className="px-4 py-2 flex-row justify-between items-center border-b border-gray-100 bg-white">
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                onPress={() => navigation.goBack()}
+    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
+      {/* Header */}
+      <View 
+        style={{ 
+          height: Platform.OS === 'ios' ? 54 : 56,
+          paddingTop: Platform.OS === 'ios' ? 10 : 0,
+          backgroundColor: 'white'
+        }}
+        className="px-3 flex-row justify-between items-center"
+      >
+        <View className="flex-row items-center">
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
             className="mr-3 p-2"
-              >
-                <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
-              </TouchableOpacity>
-              <Text className="text-2xl font-semibold text-gray-800">New Task</Text>
-            </View>
+          >
+            <Ionicons name="chevron-back" size={24} color="#4B6BFB" />
+          </TouchableOpacity>
+          <Text className="text-2xl font-semibold text-gray-800">New Task</Text>
+        </View>
         <TouchableOpacity 
           onPress={handleCreateTask}
           disabled={loading}
@@ -450,7 +457,7 @@ export const AddGroupTaskScreen: React.FC = () => {
         >
           <Ionicons name="checkmark" size={22} color="white" />
         </TouchableOpacity>
-          </View>
+      </View>
 
       <ScrollView className="flex-1 pt-4">
         {/* Task Details Card */}
